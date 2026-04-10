@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-import 'package:near_run/providers/run_provider.dart';
-import 'package:near_run/screens/main_nav_screen.dart';
+import 'core/widgets/app_bottom_nav.dart';
+import 'core/theme/app_theme.dart';
+import 'features/history/history_screen.dart';
+import 'features/home/home_screen.dart';
+import 'features/profile/profile_screen.dart';
+import 'features/run_summary/run_summary_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,18 +15,40 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => RunProvider()),
-      ],
-      child: MaterialApp(
-        title: 'NearRun',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          fontFamily: GoogleFonts.poppins().fontFamily,
-          useMaterial3: true,
-        ),
-        home: const MainNavScreen(),
+    return MaterialApp(
+      title: 'NearRun',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      home: const AppShell(),
+    );
+  }
+}
+
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _currentIndex = 0;
+
+  static const _screens = [
+    HomeScreen(),
+    HistoryScreen(),
+    RunSummaryScreen(),
+    ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      extendBody: true,
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
       ),
     );
   }
