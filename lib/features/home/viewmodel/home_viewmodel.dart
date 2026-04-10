@@ -131,7 +131,7 @@ class HomeViewModel extends ChangeNotifier {
   void onStartRunTapped() {
     _isRunActive = true;
     notifyListeners();
-    // TODO: Navigate to ActiveRunScreen (wired in build step 1)
+    // Navigation happens in the view layer
   }
 
   /// Called when user taps notification bell

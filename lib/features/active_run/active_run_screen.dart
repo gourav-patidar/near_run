@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
 import 'package:near_run/features/active_run/viewmodel/active_run_viewmodel.dart';
@@ -35,19 +37,14 @@ class _ActiveRunView extends StatelessWidget {
           const _ActiveRunAppBar(),
 
           // ── Elevation overlay (top-left) ──────────────────────────────────
-          const Positioned(
-            top: 100,
-            left: 20,
-            child: _ElevationCard(),
-          ),
+          const Positioned(top: 100, left: 20, child: _ElevationCard()),
 
           // ── Re-center button (right) ──────────────────────────────────────
           Positioned(
             right: 20,
             bottom: 360,
             child: _RecenterButton(
-              onTap: () =>
-                  context.read<ActiveRunViewModel>().recenterMap(),
+              onTap: () => context.read<ActiveRunViewModel>().recenterMap(),
             ),
           ),
 
@@ -65,117 +62,91 @@ class _ActiveRunView extends StatelessWidget {
 }
 
 // ─── Map Placeholder ──────────────────────────────────────────────────────────
-// Replace Container with FlutterMap widget when wiring GPS in Step 1
 
 class _MapPlaceholder extends StatelessWidget {
   const _MapPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: CustomPaint(painter: _MapGridPainter()),
+    return Consumer<ActiveRunViewModel>(
+      builder: (_, vm, __) {
+        return FlutterMap(
+          mapController: vm.mapController,
+          options: MapOptions(
+            initialCenter:
+                vm.currentPosition ??
+                const LatLng(37.7749, -122.4194), // SF default
+            initialZoom: 16.0,
+            minZoom: 12.0,
+            maxZoom: 19.0,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+            ),
+          ),
+          children: [
+            // OpenStreetMap tiles (free, no API key needed)
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.gourav.near_run',
+              tileProvider: NetworkTileProvider(),
+            ),
+
+            // Route polyline
+            if (vm.routeLatLngs.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: vm.routeLatLngs,
+                    strokeWidth: 6.0,
+                    color: AppColors.primary,
+                    borderColor: Colors.white,
+                    borderStrokeWidth: 2.0,
+                  ),
+                ],
+              ),
+
+            // Current position marker
+            if (vm.currentPosition != null)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: vm.currentPosition!,
+                    width: 40,
+                    height: 40,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary.withOpacity(0.2),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.primary,
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
-}
-
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Light grey map background
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = const Color(0xFFECEFF1),
-    );
-
-    // Draw grid lines (simulated city blocks)
-    final gridPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5;
-
-    for (double x = 0; x < size.width; x += 40) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += 40) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // Dashed teal route line
-    final routePaint = Paint()
-      ..color = AppColors.primaryContainer
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path()
-      ..moveTo(size.width * 0.5, size.height * 0.68)
-      ..lineTo(size.width * 0.72, size.height * 0.22);
-
-    _drawDashedPath(canvas, path, routePaint, dashLength: 12, gapLength: 8);
-
-    // Current position dot
-    final dotCenter = Offset(size.width * 0.5, size.height * 0.68);
-    canvas.drawCircle(
-      dotCenter,
-      14,
-      Paint()..color = AppColors.primary.withOpacity(0.2),
-    );
-    canvas.drawCircle(
-      dotCenter,
-      8,
-      Paint()..color = AppColors.primary,
-    );
-    canvas.drawCircle(
-      dotCenter,
-      5,
-      Paint()..color = Colors.white,
-    );
-
-    // End dot (hollow)
-    final endDot = Offset(size.width * 0.72, size.height * 0.22);
-    canvas.drawCircle(
-      endDot,
-      10,
-      Paint()
-        ..color = AppColors.primaryContainer
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawCircle(
-      endDot,
-      10,
-      Paint()
-        ..color = AppColors.primary
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  void _drawDashedPath(
-    Canvas canvas,
-    Path path,
-    Paint paint, {
-    required double dashLength,
-    required double gapLength,
-  }) {
-    final metrics = path.computeMetrics();
-    for (final metric in metrics) {
-      double distance = 0;
-      bool draw = true;
-      while (distance < metric.length) {
-        final len = draw ? dashLength : gapLength;
-        if (draw) {
-          canvas.drawPath(
-            metric.extractPath(distance, distance + len),
-            paint,
-          );
-        }
-        distance += len;
-        draw = !draw;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ─── Top App Bar ──────────────────────────────────────────────────────────────
@@ -218,11 +189,7 @@ class _ActiveRunAppBar extends StatelessWidget {
                 color: AppColors.primary,
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 1,
-                height: 20,
-                color: AppColors.outlineVariant,
-              ),
+              Container(width: 1, height: 20, color: AppColors.outlineVariant),
               const SizedBox(width: 8),
 
               // ON badge
@@ -260,8 +227,11 @@ class _StatusBadge extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  const _StatusBadge(
-      {required this.icon, required this.label, required this.color});
+  const _StatusBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -270,12 +240,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(99),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            blurRadius: 8,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: AppColors.cardShadow, blurRadius: 8)],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -370,10 +335,7 @@ class _ElevationCard extends StatelessWidget {
                           color: AppColors.onSurface,
                         ),
                       ),
-                      TextSpan(
-                        text: ' m',
-                        style: AppTextStyles.bodyMedium,
-                      ),
+                      TextSpan(text: ' m', style: AppTextStyles.bodyMedium),
                     ],
                   ),
                 ),
@@ -385,8 +347,9 @@ class _ElevationCard extends StatelessWidget {
                     value: vm.elevationProgress,
                     minHeight: 10,
                     backgroundColor: AppColors.surfaceContainerLow,
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.primaryContainer),
+                    valueColor: const AlwaysStoppedAnimation(
+                      AppColors.primaryContainer,
+                    ),
                   ),
                 ),
               ],
@@ -461,10 +424,7 @@ class _StatsBottomSheet extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'DISTANCE',
-                      style: AppTextStyles.chipLabel,
-                    ),
+                    Text('DISTANCE', style: AppTextStyles.chipLabel),
                     const SizedBox(height: 2),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -515,8 +475,10 @@ class _StatsBottomSheet extends StatelessWidget {
               child: GestureDetector(
                 onLongPress: vm.stopRun,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   child: Text(
                     'HOLD TO STOP',
                     style: AppTextStyles.labelSmall.copyWith(
@@ -594,9 +556,7 @@ class _PausePlayButton extends StatelessWidget {
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: Icon(
-            vm.isRunning
-                ? Icons.pause_rounded
-                : Icons.play_arrow_rounded,
+            vm.isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
             key: ValueKey(vm.isRunning),
             color: AppColors.primary,
             size: 40,
@@ -628,17 +588,16 @@ class _RunMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final isRight = align == TextAlign.right;
     return Padding(
-      padding: EdgeInsets.only(
-        left: isRight ? 20 : 0,
-        right: isRight ? 0 : 20,
-      ),
+      padding: EdgeInsets.only(left: isRight ? 20 : 0, right: isRight ? 0 : 20),
       child: Column(
-        crossAxisAlignment:
-            isRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isRight
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment:
-                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
+            mainAxisAlignment: isRight
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
             children: [
               Icon(icon, size: 16, color: AppColors.primary),
               const SizedBox(width: 6),
@@ -647,8 +606,9 @@ class _RunMetric extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Row(
-            mainAxisAlignment:
-                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
+            mainAxisAlignment: isRight
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [

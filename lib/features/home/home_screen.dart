@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../home/viewmodel/home_viewmodel.dart';
+import '../active_run/active_run_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -49,7 +50,16 @@ class _HomeView extends StatelessWidget {
               children: [
                 _GreetingSection(vm: vm),
                 const SizedBox(height: 32),
-                _StartRunButton(onTap: vm.onStartRunTapped),
+                _StartRunButton(
+                  onTap: () {
+                    vm.onStartRunTapped();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ActiveRunScreen(),
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 36),
                 if (vm.quickTip != null) ...[
                   _QuickTipCard(tip: vm.quickTip!),

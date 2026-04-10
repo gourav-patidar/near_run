@@ -1,5 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:flutter_map/flutter_map.dart';
+import '../../../core/models/run_model.dart';
+import '../../../core/services/gps_tracking_service.dart';
+import '../../../core/services/database_service.dart';
 
 // ─── Heart Rate Zone ──────────────────────────────────────────────────────────
 
@@ -31,35 +36,56 @@ enum RunState { idle, running, paused, stopped }
 // ─── ViewModel ────────────────────────────────────────────────────────────────
 
 class ActiveRunViewModel extends ChangeNotifier {
+  final GpsTrackingService _gpsService = GpsTrackingService.instance;
+  final DatabaseService _dbService = DatabaseService.instance;
+
+  // Map controller
+  final MapController mapController = MapController();
+
   // ── Run state ───────────────────────────────────────────────────────────────
-  RunState _runState = RunState.running;
+  RunState _runState = RunState.idle;
   RunState get runState => _runState;
 
   bool get isRunning => _runState == RunState.running;
   bool get isPaused => _runState == RunState.paused;
+  bool get isStopped => _runState == RunState.stopped;
 
-  // ── Distance ────────────────────────────────────────────────────────────────
-  double _distanceKm = 3.42;
-  double get distanceKm => _distanceKm;
+  // ── GPS & Route data ────────────────────────────────────────────────────────
+  final List<LocationPoint> _routePoints = [];
+  List<LatLng> get routeLatLngs => _routePoints.map((p) => p.position).toList();
 
-  String get distanceFormatted {
-    // Split at decimal for styled display
-    final parts = _distanceKm.toStringAsFixed(2).split('.');
-    return '${parts[0]}.${parts[1]}';
+  LatLng? _currentPosition;
+  LatLng? get currentPosition => _currentPosition;
+
+  StreamSubscription<LocationPoint>? _locationSubscription;
+
+  // ── Run metrics ─────────────────────────────────────────────────────────────
+  DateTime? _startTime;
+  DateTime? _pauseTime;
+  int _pausedDuration = 0; // Total paused duration in seconds
+
+  double _distanceMeters = 0.0;
+  double get distanceKm => _distanceMeters / 1000;
+
+  int get elapsedSeconds {
+    if (_startTime == null) return 0;
+    if (_runState == RunState.paused && _pauseTime != null) {
+      return _pauseTime!.difference(_startTime!).inSeconds - _pausedDuration;
+    }
+    return DateTime.now().difference(_startTime!).inSeconds - _pausedDuration;
   }
 
-  String get distanceWhole => _distanceKm.toStringAsFixed(0);
+  // ── Distance formatting ─────────────────────────────────────────────────────
+  String get distanceFormatted => distanceKm.toStringAsFixed(2);
+  String get distanceWhole => distanceKm.toStringAsFixed(0);
   String get distanceDecimal =>
-      '.${_distanceKm.toStringAsFixed(2).split('.')[1]}';
+      '.${distanceKm.toStringAsFixed(2).split('.')[1]}';
 
-  // ── Duration ────────────────────────────────────────────────────────────────
-  int _elapsedSeconds = 21 * 60 + 30; // 21:30 initial (demo)
-  int get elapsedSeconds => _elapsedSeconds;
-
+  // ── Duration formatting ─────────────────────────────────────────────────────
   String get durationFormatted {
-    final h = _elapsedSeconds ~/ 3600;
-    final m = (_elapsedSeconds % 3600) ~/ 60;
-    final s = _elapsedSeconds % 60;
+    final h = elapsedSeconds ~/ 3600;
+    final m = (elapsedSeconds % 3600) ~/ 60;
+    final s = elapsedSeconds % 60;
     if (h > 0) {
       return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
@@ -67,68 +93,116 @@ class ActiveRunViewModel extends ChangeNotifier {
   }
 
   // ── Pace ────────────────────────────────────────────────────────────────────
-  // pace in seconds per km
-  int _paceSeconds = 6 * 60 + 15; // 6'15" /km
-  int get paceSeconds => _paceSeconds;
+  int get paceSeconds {
+    if (distanceKm == 0) return 0;
+    return (elapsedSeconds / distanceKm).round();
+  }
 
   String get paceFormatted {
-    final m = _paceSeconds ~/ 60;
-    final s = _paceSeconds % 60;
+    if (paceSeconds == 0) return '--\'--"';
+    final m = paceSeconds ~/ 60;
+    final s = paceSeconds % 60;
     return '$m\'${s.toString().padLeft(2, '0')}"';
   }
 
   // ── Elevation ───────────────────────────────────────────────────────────────
-  int _elevationMeters = 124;
-  int get elevationMeters => _elevationMeters;
+  double _elevationGainMeters = 0.0;
+  int get elevationMeters => _elevationGainMeters.round();
+  double get elevationProgress => (_elevationGainMeters / 300).clamp(0.0, 1.0);
 
-  // Elevation gain as 0.0–1.0 progress for the bar
-  double get elevationProgress => (_elevationMeters / 300).clamp(0.0, 1.0);
-
-  // ── Heart Rate ───────────────────────────────────────────────────────────────
-  int _heartRateBpm = 164;
+  // ── Heart Rate (placeholder - would need bluetooth HR monitor) ──────────────
+  int _heartRateBpm = 0;
   int get heartRateBpm => _heartRateBpm;
-
   HeartRateZone get heartRateZone => HeartRateZone.fromBpm(_heartRateBpm);
-
-  // Zone bar: 5 segments, filled up to current zone
   int get filledZoneSegments => heartRateZone.number;
 
   // ── Timers ──────────────────────────────────────────────────────────────────
-  Timer? _durationTimer;
-  Timer? _simulationTimer;
+  Timer? _updateTimer;
 
   // ── Init ────────────────────────────────────────────────────────────────────
   ActiveRunViewModel() {
-    _startTimers();
+    _initializeRun();
   }
 
-  void _startTimers() {
-    // Tick elapsed time every second
-    _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_runState == RunState.running) {
-        _elapsedSeconds++;
-        _updatePace();
-        notifyListeners();
-      }
-    });
+  Future<void> _initializeRun() async {
+    // Initialize foreground task
+    await _gpsService.initForegroundTask();
 
-    // Simulate GPS distance & heart rate every 3s
-    _simulationTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_runState == RunState.running) {
-        _distanceKm += 0.012;
-        _heartRateBpm = (_heartRateBpm + ((_heartRateBpm < 170) ? 1 : -1))
-            .clamp(120, 185);
-        _elevationMeters += 1;
-        notifyListeners();
-      }
-    });
-  }
-
-  void _updatePace() {
-    if (_distanceKm > 0) {
-      // pace (sec/km) = elapsed / distance
-      _paceSeconds = (_elapsedSeconds / _distanceKm).round();
+    // Start tracking
+    final started = await _gpsService.startTracking();
+    if (!started) {
+      debugPrint('Failed to start GPS tracking - check permissions');
+      return;
     }
+
+    // Listen to location updates
+    _locationSubscription = _gpsService.locationStream?.listen((locationPoint) {
+      _onLocationUpdate(locationPoint);
+    });
+
+    // Start the run
+    _startTime = DateTime.now();
+    _runState = RunState.running;
+
+    // UI update timer (every second)
+    _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_runState == RunState.running) {
+        _updateNotification();
+        notifyListeners();
+      }
+    });
+
+    notifyListeners();
+  }
+
+  // ── Handle location updates ─────────────────────────────────────────────────
+  void _onLocationUpdate(LocationPoint point) {
+    if (_runState != RunState.running) return;
+
+    _currentPosition = point.position;
+
+    // Calculate distance if we have a previous point
+    if (_routePoints.isNotEmpty) {
+      final lastPoint = _routePoints.last;
+      final distance = const Distance().as(
+        LengthUnit.Meter,
+        lastPoint.position,
+        point.position,
+      );
+
+      // Only add point if moved at least 5 meters (reduces noise)
+      if (distance >= 5) {
+        _distanceMeters += distance;
+
+        // Calculate elevation gain
+        if (point.altitude != null && lastPoint.altitude != null) {
+          final elevationChange = point.altitude! - lastPoint.altitude!;
+          if (elevationChange > 0) {
+            _elevationGainMeters += elevationChange;
+          }
+        }
+
+        _routePoints.add(point);
+
+        // Center map on current position
+        mapController.move(point.position, mapController.camera.zoom);
+      }
+    } else {
+      // First point
+      _routePoints.add(point);
+      mapController.move(point.position, 16.0);
+    }
+
+    notifyListeners();
+  }
+
+  // ── Update notification ─────────────────────────────────────────────────────
+  void _updateNotification() {
+    _gpsService.updateNotification(
+      distance: distanceKm.toStringAsFixed(2),
+      duration: durationFormatted,
+      pace: paceFormatted,
+    );
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
@@ -136,31 +210,60 @@ class ActiveRunViewModel extends ChangeNotifier {
   void togglePause() {
     if (_runState == RunState.running) {
       _runState = RunState.paused;
+      _pauseTime = DateTime.now();
     } else if (_runState == RunState.paused) {
+      if (_pauseTime != null && _startTime != null) {
+        _pausedDuration += DateTime.now().difference(_pauseTime!).inSeconds;
+      }
       _runState = RunState.running;
+      _pauseTime = null;
     }
     notifyListeners();
   }
 
-  /// Hold-to-stop: call after long press confirmed
-  void stopRun() {
+  Future<void> stopRun() async {
+    if (_runState == RunState.stopped || _startTime == null) return;
+
     _runState = RunState.stopped;
-    _durationTimer?.cancel();
-    _simulationTimer?.cancel();
+
+    // Stop GPS tracking
+    await _gpsService.stopTracking();
+    _updateTimer?.cancel();
+    _locationSubscription?.cancel();
+
+    // Save run to database
+    if (_routePoints.isNotEmpty && _distanceMeters > 50) {
+      final run = RunModel(
+        startTime: _startTime!,
+        endTime: DateTime.now(),
+        distanceMeters: _distanceMeters,
+        durationSeconds: elapsedSeconds,
+        routePoints: routeLatLngs,
+        avgPaceSecondsPerKm: paceSeconds.toDouble(),
+        elevationGainMeters: _elevationGainMeters,
+        avgHeartRate: _heartRateBpm > 0 ? _heartRateBpm : null,
+      );
+
+      await _dbService.createRun(run);
+      debugPrint(
+        'Run saved: ${distanceKm.toStringAsFixed(2)} km in $durationFormatted',
+      );
+    }
+
     notifyListeners();
-    // TODO: trigger save to sqflite + navigate to RunSummaryScreen
-    debugPrint('Run stopped — distance: ${distanceKm.toStringAsFixed(2)} km');
   }
 
   void recenterMap() {
-    // TODO: call map controller to animate to current position
-    debugPrint('Recentering map');
+    if (_currentPosition != null) {
+      mapController.move(_currentPosition!, mapController.camera.zoom);
+    }
   }
 
   @override
   void dispose() {
-    _durationTimer?.cancel();
-    _simulationTimer?.cancel();
+    _updateTimer?.cancel();
+    _locationSubscription?.cancel();
+    _gpsService.stopTracking();
     super.dispose();
   }
 }
