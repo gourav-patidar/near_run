@@ -28,34 +28,94 @@ class _ActiveRunView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceContainerLow,
-      body: Stack(
-        children: [
-          // ── Full screen map ────────────────────────────────────────────────
-          const _MapPlaceholder(),
+      body: Consumer<ActiveRunViewModel>(
+        builder: (context, vm, _) {
+          // Show loading while initializing
+          if (vm.isIdle) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: AppColors.primary),
+                  SizedBox(height: 16),
+                  Text(
+                    'Requesting location permissions...',
+                    style: TextStyle(color: AppColors.onSurface),
+                  ),
+                ],
+              ),
+            );
+          }
 
-          // ── Top app bar ───────────────────────────────────────────────────
-          const _ActiveRunAppBar(),
+          // Show error if permission denied or GPS failed
+          if (vm.isStopped && vm.errorMessage != null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.location_off_rounded,
+                      size: 64,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      vm.errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodyLarge.copyWith(
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.onPrimary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                      ),
+                      child: const Text('Go Back'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
 
-          // ── Elevation overlay (top-left) ──────────────────────────────────
-          const Positioned(top: 100, left: 20, child: _ElevationCard()),
+          // Normal running UI
+          return Stack(
+            children: [
+              // ── Full screen map ────────────────────────────────────────────────
+              const _MapPlaceholder(),
 
-          // ── Re-center button (right) ──────────────────────────────────────
-          Positioned(
-            right: 20,
-            bottom: 360,
-            child: _RecenterButton(
-              onTap: () => context.read<ActiveRunViewModel>().recenterMap(),
-            ),
-          ),
+              // ── Top app bar ───────────────────────────────────────────────────
+              const _ActiveRunAppBar(),
 
-          // ── Bottom stats sheet ────────────────────────────────────────────
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _StatsBottomSheet(),
-          ),
-        ],
+              // ── Elevation overlay (top-left) ──────────────────────────────────
+              const Positioned(top: 100, left: 20, child: _ElevationCard()),
+
+              // ── Re-center button (right) ──────────────────────────────────────
+              Positioned(
+                right: 20,
+                bottom: 360,
+                child: _RecenterButton(onTap: () => vm.recenterMap()),
+              ),
+
+              // ── Bottom stats sheet ────────────────────────────────────────────
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _StatsBottomSheet(),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -473,17 +533,30 @@ class _StatsBottomSheet extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
-                onLongPress: vm.stopRun,
+                onLongPress: () async {
+                  await vm.stopRun();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                onLongPressStart: (_) {
+                  // Visual feedback that press is registered
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     'HOLD TO STOP',
                     style: AppTextStyles.labelSmall.copyWith(
                       color: AppColors.primary,
                       letterSpacing: 1.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),

@@ -49,6 +49,10 @@ class ActiveRunViewModel extends ChangeNotifier {
   bool get isRunning => _runState == RunState.running;
   bool get isPaused => _runState == RunState.paused;
   bool get isStopped => _runState == RunState.stopped;
+  bool get isIdle => _runState == RunState.idle;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
 
   // ── GPS & Route data ────────────────────────────────────────────────────────
   final List<LocationPoint> _routePoints = [];
@@ -125,13 +129,36 @@ class ActiveRunViewModel extends ChangeNotifier {
   }
 
   Future<void> _initializeRun() async {
+    _runState = RunState.idle;
+    _errorMessage = null;
+    notifyListeners();
+
     // Initialize foreground task
     await _gpsService.initForegroundTask();
+
+    // Check and request permissions first
+    final hasPermission = await _gpsService.checkPermissions();
+    if (!hasPermission) {
+      _errorMessage =
+          'Location permission denied. Please enable location access in settings.';
+      _runState = RunState.stopped;
+      notifyListeners();
+      return;
+    }
+
+    // Get initial position
+    final initialPosition = await _gpsService.getCurrentPosition();
+    if (initialPosition != null) {
+      _currentPosition = initialPosition;
+      mapController.move(initialPosition, 16.0);
+    }
 
     // Start tracking
     final started = await _gpsService.startTracking();
     if (!started) {
-      debugPrint('Failed to start GPS tracking - check permissions');
+      _errorMessage = 'Failed to start GPS tracking. Please try again.';
+      _runState = RunState.stopped;
+      notifyListeners();
       return;
     }
 
@@ -152,6 +179,7 @@ class ActiveRunViewModel extends ChangeNotifier {
       }
     });
 
+    debugPrint('Run initialized successfully');
     notifyListeners();
   }
 
@@ -255,7 +283,20 @@ class ActiveRunViewModel extends ChangeNotifier {
 
   void recenterMap() {
     if (_currentPosition != null) {
-      mapController.move(_currentPosition!, mapController.camera.zoom);
+      try {
+        final currentZoom = mapController.camera.zoom;
+        mapController.move(
+          _currentPosition!,
+          currentZoom > 14 ? currentZoom : 16.0,
+        );
+        debugPrint(
+          'Map recentered to: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
+        );
+      } catch (e) {
+        debugPrint('Error recentering map: $e');
+      }
+    } else {
+      debugPrint('No current position to recenter to');
     }
   }
 

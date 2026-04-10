@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/run_model.dart';
 
@@ -48,27 +49,42 @@ class GpsTrackingService {
   // ── Check and request permissions ───────────────────────────────────────────
 
   Future<bool> checkPermissions() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    // Check if location services are enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      debugPrint('Location services are disabled');
       return false;
     }
 
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return false;
+    // Request location permission using permission_handler
+    var status = await Permission.location.status;
+
+    if (status.isDenied) {
+      status = await Permission.location.request();
+    }
+
+    if (status.isDenied) {
+      debugPrint('Location permission denied');
+      return false;
+    }
+
+    if (status.isPermanentlyDenied) {
+      debugPrint('Location permission permanently denied');
+      // Open app settings
+      await openAppSettings();
+      return false;
+    }
+
+    // Request background location for Android 10+
+    if (await Permission.locationAlways.isDenied) {
+      final bgStatus = await Permission.locationAlways.request();
+      if (bgStatus.isDenied) {
+        debugPrint('Background location permission denied (optional)');
+        // Continue anyway, foreground permission is enough for now
       }
     }
 
-    if (permission == LocationPermission.deniedForever) {
-      return false;
-    }
-
-    return true;
+    return status.isGranted || status.isLimited;
   }
 
   // ── Start tracking ──────────────────────────────────────────────────────────
