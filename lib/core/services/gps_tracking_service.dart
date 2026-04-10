@@ -56,35 +56,40 @@ class GpsTrackingService {
       return false;
     }
 
-    // Request location permission using permission_handler
+    // Check current permission status
     var status = await Permission.location.status;
+    debugPrint('Initial location permission status: $status');
 
-    if (status.isDenied) {
+    // If not granted, request permission
+    if (!status.isGranted) {
+      debugPrint('Requesting location permission...');
       status = await Permission.location.request();
+      debugPrint('Location permission after request: $status');
     }
 
     if (status.isDenied) {
-      debugPrint('Location permission denied');
+      debugPrint('Location permission denied by user');
       return false;
     }
 
     if (status.isPermanentlyDenied) {
       debugPrint('Location permission permanently denied');
-      // Open app settings
-      await openAppSettings();
       return false;
     }
 
-    // Request background location for Android 10+
-    if (await Permission.locationAlways.isDenied) {
-      final bgStatus = await Permission.locationAlways.request();
-      if (bgStatus.isDenied) {
-        debugPrint('Background location permission denied (optional)');
-        // Continue anyway, foreground permission is enough for now
-      }
-    }
-
+    debugPrint('Location permission granted: ${status.isGranted}');
     return status.isGranted || status.isLimited;
+  }
+
+  // Check if permissions are already granted (without requesting)
+  Future<bool> hasPermissions() async {
+    final status = await Permission.location.status;
+    return status.isGranted || status.isLimited;
+  }
+
+  // Open app settings for user to manually enable permissions
+  Future<void> openSettings() async {
+    await openAppSettings();
   }
 
   // ── Start tracking ──────────────────────────────────────────────────────────

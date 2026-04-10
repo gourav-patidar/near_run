@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../core/models/run_model.dart';
 import '../../../core/services/gps_tracking_service.dart';
 import '../../../core/services/database_service.dart';
@@ -133,54 +134,84 @@ class ActiveRunViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    // Initialize foreground task
-    await _gpsService.initForegroundTask();
+    try {
+      // Initialize foreground task
+      await _gpsService.initForegroundTask();
 
-    // Check and request permissions first
-    final hasPermission = await _gpsService.checkPermissions();
-    if (!hasPermission) {
-      _errorMessage =
-          'Location permission denied. Please enable location access in settings.';
-      _runState = RunState.stopped;
-      notifyListeners();
-      return;
-    }
+      // Check and request permissions with proper UI feedback
+      debugPrint('Checking location permissions...');
+      final hasPermission = await _gpsService.checkPermissions();
 
-    // Get initial position
-    final initialPosition = await _gpsService.getCurrentPosition();
-    if (initialPosition != null) {
-      _currentPosition = initialPosition;
-      mapController.move(initialPosition, 16.0);
-    }
-
-    // Start tracking
-    final started = await _gpsService.startTracking();
-    if (!started) {
-      _errorMessage = 'Failed to start GPS tracking. Please try again.';
-      _runState = RunState.stopped;
-      notifyListeners();
-      return;
-    }
-
-    // Listen to location updates
-    _locationSubscription = _gpsService.locationStream?.listen((locationPoint) {
-      _onLocationUpdate(locationPoint);
-    });
-
-    // Start the run
-    _startTime = DateTime.now();
-    _runState = RunState.running;
-
-    // UI update timer (every second)
-    _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_runState == RunState.running) {
-        _updateNotification();
+      if (!hasPermission) {
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          _errorMessage =
+              'Location services are disabled. Please enable GPS in your device settings.';
+        } else {
+          _errorMessage =
+              'Location permission is required to track your run. Please grant permission in settings.';
+        }
+        _runState = RunState.stopped;
         notifyListeners();
+        return;
       }
-    });
 
-    debugPrint('Run initialized successfully');
-    notifyListeners();
+      debugPrint('Location permission granted, getting initial position...');
+
+      // Get initial position
+      final initialPosition = await _gpsService.getCurrentPosition();
+      if (initialPosition != null) {
+        _currentPosition = initialPosition;
+        mapController.move(initialPosition, 16.0);
+        debugPrint(
+          'Initial position: ${initialPosition.latitude}, ${initialPosition.longitude}',
+        );
+      } else {
+        debugPrint('Could not get initial position, will wait for GPS updates');
+      }
+
+      // Start tracking
+      debugPrint('Starting GPS tracking...');
+      final started = await _gpsService.startTracking();
+      if (!started) {
+        _errorMessage =
+            'Failed to start GPS tracking. Please ensure location services are enabled and try again.';
+        _runState = RunState.stopped;
+        notifyListeners();
+        return;
+      }
+
+      // Listen to location updates
+      _locationSubscription = _gpsService.locationStream?.listen(
+        (locationPoint) {
+          _onLocationUpdate(locationPoint);
+        },
+        onError: (error) {
+          debugPrint('Location stream error: $error');
+        },
+      );
+
+      // Start the run
+      _startTime = DateTime.now();
+      _runState = RunState.running;
+
+      // UI update timer (every second)
+      _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_runState == RunState.running) {
+          _updateNotification();
+          notifyListeners();
+        }
+      });
+
+      debugPrint('Run initialized successfully');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error initializing run: $e');
+      _errorMessage =
+          'An error occurred while starting the run. Please try again.';
+      _runState = RunState.stopped;
+      notifyListeners();
+    }
   }
 
   // ── Handle location updates ─────────────────────────────────────────────────

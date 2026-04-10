@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
 import 'package:near_run/features/active_run/viewmodel/active_run_viewmodel.dart';
+import 'package:near_run/core/services/gps_tracking_service.dart';
 import 'package:provider/provider.dart';
 
 class ActiveRunScreen extends StatelessWidget {
@@ -39,8 +40,24 @@ class _ActiveRunView extends StatelessWidget {
                   CircularProgressIndicator(color: AppColors.primary),
                   SizedBox(height: 16),
                   Text(
-                    'Requesting location permissions...',
-                    style: TextStyle(color: AppColors.onSurface),
+                    'Initializing GPS...',
+                    style: TextStyle(
+                      color: AppColors.onSurface,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 48),
+                    child: Text(
+                      'Please allow location permissions when prompted',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -69,17 +86,40 @@ class _ActiveRunView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.onPrimary,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 16,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.surfaceContainerHigh,
+                            foregroundColor: AppColors.onSurface,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
+                          ),
+                          child: const Text('Go Back'),
                         ),
-                      ),
-                      child: const Text('Go Back'),
+                        if (vm.errorMessage!.contains('settings'))
+                          const SizedBox(width: 12),
+                        if (vm.errorMessage!.contains('settings'))
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await GpsTrackingService.instance.openSettings();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: AppColors.onPrimary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                            ),
+                            icon: const Icon(Icons.settings_outlined, size: 20),
+                            label: const Text('Open Settings'),
+                          ),
+                      ],
                     ),
                   ],
                 ),
