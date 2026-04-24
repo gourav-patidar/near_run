@@ -2,11 +2,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:near_run/core/theme/app_colors.dart';
-import 'package:near_run/core/theme/app_text_styles.dart';
-import 'package:near_run/features/active_run/viewmodel/active_run_viewmodel.dart';
-import 'package:near_run/core/services/gps_tracking_service.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/run_model.dart';
+import '../../core/services/gps_tracking_service.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../run_summary/run_summary_screen.dart';
+import 'viewmodel/active_run_viewmodel.dart';
 
 class ActiveRunScreen extends StatelessWidget {
   const ActiveRunScreen({super.key});
@@ -20,8 +22,6 @@ class ActiveRunScreen extends StatelessWidget {
   }
 }
 
-// ─── Root View ────────────────────────────────────────────────────────────────
-
 class _ActiveRunView extends StatelessWidget {
   const _ActiveRunView();
 
@@ -31,127 +31,26 @@ class _ActiveRunView extends StatelessWidget {
       backgroundColor: AppColors.surfaceContainerLow,
       body: Consumer<ActiveRunViewModel>(
         builder: (context, vm, _) {
-          // Show loading while initializing
-          if (vm.isIdle) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: AppColors.primary),
-                  SizedBox(height: 16),
-                  Text(
-                    'Initializing GPS...',
-                    style: TextStyle(
-                      color: AppColors.onSurface,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 48),
-                    child: Text(
-                      'Please allow location permissions when prompted',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.onSurfaceVariant,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+          if (vm.isInitializing) return const _InitializingView();
+          if (vm.hasError) return _ErrorView(vm: vm);
 
-          // Show error if permission denied or GPS failed
-          if (vm.isStopped && vm.errorMessage != null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.location_off_rounded,
-                      size: 64,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      vm.errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.surfaceContainerHigh,
-                            foregroundColor: AppColors.onSurface,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 16,
-                            ),
-                          ),
-                          child: const Text('Go Back'),
-                        ),
-                        if (vm.errorMessage!.contains('settings'))
-                          const SizedBox(width: 12),
-                        if (vm.errorMessage!.contains('settings'))
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              await GpsTrackingService.instance.openSettings();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.onPrimary,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 16,
-                              ),
-                            ),
-                            icon: const Icon(Icons.settings_outlined, size: 20),
-                            label: const Text('Open Settings'),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // Normal running UI
           return Stack(
             children: [
-              // ── Full screen map ────────────────────────────────────────────────
-              const _MapPlaceholder(),
-
-              // ── Top app bar ───────────────────────────────────────────────────
+              const _MapLayer(),
               const _ActiveRunAppBar(),
-
-              // ── Elevation overlay (top-left) ──────────────────────────────────
               const Positioned(top: 100, left: 20, child: _ElevationCard()),
-
-              // ── Re-center button (right) ──────────────────────────────────────
               Positioned(
                 right: 20,
                 bottom: 360,
-                child: _RecenterButton(onTap: () => vm.recenterMap()),
+                child: _RecenterButton(onTap: vm.recenterMap),
               ),
-
-              // ── Bottom stats sheet ────────────────────────────────────────────
-              const Positioned(
+              Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: _StatsBottomSheet(),
+                child: _StatsBottomSheet(
+                  onStopComplete: (run) => _handleStop(context, run),
+                ),
               ),
             ],
           );
@@ -159,12 +58,146 @@ class _ActiveRunView extends StatelessWidget {
       ),
     );
   }
+
+  void _handleStop(BuildContext context, RunModel? run) async {
+    if (!context.mounted) return;
+    if (run == null) {
+      // Too short — just leave without saving anything.
+      Navigator.of(context).pop();
+      return;
+    }
+    // Replace the active run screen with the summary, so back goes to Home.
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => RunSummaryScreen(run: run)),
+    );
+  }
 }
 
-// ─── Map Placeholder ──────────────────────────────────────────────────────────
+// ─── Initializing / Error states ──────────────────────────────────────────────
 
-class _MapPlaceholder extends StatelessWidget {
-  const _MapPlaceholder();
+class _InitializingView extends StatelessWidget {
+  const _InitializingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: AppColors.primary),
+          SizedBox(height: 16),
+          Text(
+            'Getting GPS fix…',
+            style: TextStyle(
+              color: AppColors.onSurface,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 8),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 48),
+            child: Text(
+              'Please allow location permission when prompted.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final ActiveRunViewModel vm;
+  const _ErrorView({required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.location_off_rounded,
+              size: 64,
+              color: AppColors.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              vm.errorMessage ?? 'Unknown error',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.surfaceContainerHigh,
+                    foregroundColor: AppColors.onSurface,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                  ),
+                  child: const Text('Go Back'),
+                ),
+                if (vm.needsAppSettings)
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        GpsTrackingService.instance.openSettings(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                    ),
+                    icon: const Icon(Icons.settings_outlined, size: 20),
+                    label: const Text('Open Settings'),
+                  ),
+                if (vm.needsLocationService)
+                  ElevatedButton.icon(
+                    onPressed: () => GpsTrackingService.instance
+                        .openLocationServiceSettings(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                    ),
+                    icon: const Icon(Icons.gps_fixed_rounded, size: 20),
+                    label: const Text('Turn On GPS'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Map layer ────────────────────────────────────────────────────────────────
+
+class _MapLayer extends StatelessWidget {
+  const _MapLayer();
 
   @override
   Widget build(BuildContext context) {
@@ -174,24 +207,22 @@ class _MapPlaceholder extends StatelessWidget {
           mapController: vm.mapController,
           options: MapOptions(
             initialCenter:
-                vm.currentPosition ??
-                const LatLng(37.7749, -122.4194), // SF default
+                vm.currentPosition ?? const LatLng(0.0, 0.0),
             initialZoom: 16.0,
-            minZoom: 12.0,
+            minZoom: 3.0,
             maxZoom: 19.0,
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
             ),
           ),
           children: [
-            // OpenStreetMap tiles (free, no API key needed)
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.gourav.near_run',
-              tileProvider: NetworkTileProvider(),
+              // Offline-friendly: missing tiles just render blank, polyline
+              // still shows correctly on top.
+              errorTileCallback: (_, __, ___) {},
             ),
-
-            // Route polyline
             if (vm.routeLatLngs.isNotEmpty)
               PolylineLayer(
                 polylines: [
@@ -204,8 +235,6 @@ class _MapPlaceholder extends StatelessWidget {
                   ),
                 ],
               ),
-
-            // Current position marker
             if (vm.currentPosition != null)
               MarkerLayer(
                 markers: [
@@ -249,7 +278,7 @@ class _MapPlaceholder extends StatelessWidget {
   }
 }
 
-// ─── Top App Bar ──────────────────────────────────────────────────────────────
+// ─── App bar ──────────────────────────────────────────────────────────────────
 
 class _ActiveRunAppBar extends StatelessWidget {
   const _ActiveRunAppBar();
@@ -265,14 +294,11 @@ class _ActiveRunAppBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              // Hamburger
               _GlassIconButton(
-                icon: Icons.menu_rounded,
+                icon: Icons.arrow_back_rounded,
                 onTap: () => Navigator.of(context).maybePop(),
               ),
               const SizedBox(width: 12),
-
-              // Logo
               Text(
                 'near_run',
                 style: AppTextStyles.brandTitle.copyWith(
@@ -281,38 +307,13 @@ class _ActiveRunAppBar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-
-              // STRONG badge
-              _StatusBadge(
-                icon: Icons.radio_button_checked_rounded,
-                label: 'STRONG',
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 8),
-              Container(width: 1, height: 20, color: AppColors.outlineVariant),
-              const SizedBox(width: 8),
-
-              // ON badge
-              _StatusBadge(
-                icon: Icons.local_fire_department_outlined,
-                label: 'ON',
-                color: Colors.orange,
-              ),
-              const SizedBox(width: 12),
-
-              // Avatar
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary, width: 2),
-                  color: AppColors.primaryContainer,
-                ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: AppColors.primary,
-                  size: 20,
+              Consumer<ActiveRunViewModel>(
+                builder: (_, vm, __) => _StatusBadge(
+                  icon: vm.isRunning
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.pause_circle_outline,
+                  label: vm.isRunning ? 'LIVE' : 'PAUSED',
+                  color: vm.isRunning ? AppColors.primary : Colors.orange,
                 ),
               ),
             ],
@@ -388,7 +389,7 @@ class _GlassIconButton extends StatelessWidget {
   }
 }
 
-// ─── Elevation Card ───────────────────────────────────────────────────────────
+// ─── Elevation card ───────────────────────────────────────────────────────────
 
 class _ElevationCard extends StatelessWidget {
   const _ElevationCard();
@@ -440,7 +441,6 @@ class _ElevationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Elevation bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
@@ -461,7 +461,7 @@ class _ElevationCard extends StatelessWidget {
   }
 }
 
-// ─── Recenter Button ──────────────────────────────────────────────────────────
+// ─── Recenter button ──────────────────────────────────────────────────────────
 
 class _RecenterButton extends StatelessWidget {
   final VoidCallback onTap;
@@ -495,10 +495,11 @@ class _RecenterButton extends StatelessWidget {
   }
 }
 
-// ─── Stats Bottom Sheet ───────────────────────────────────────────────────────
+// ─── Stats sheet ──────────────────────────────────────────────────────────────
 
 class _StatsBottomSheet extends StatelessWidget {
-  const _StatsBottomSheet();
+  final void Function(RunModel?) onStopComplete;
+  const _StatsBottomSheet({required this.onStopComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -517,7 +518,6 @@ class _StatsBottomSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Distance row ──────────────────────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -563,24 +563,15 @@ class _StatsBottomSheet extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-
-                // ── Pause/Play button ──────────────────────────────────────
                 _PausePlayButton(vm: vm),
               ],
             ),
-
-            // ── Hold to stop ──────────────────────────────────────────────
             Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
                 onLongPress: () async {
-                  await vm.stopRun();
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                onLongPressStart: (_) {
-                  // Visual feedback that press is registered
+                  final run = await vm.stopAndBuildRun();
+                  onStopComplete(run);
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -603,8 +594,6 @@ class _StatsBottomSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // ── Pace + Duration row ───────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -631,18 +620,12 @@ class _StatsBottomSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // ── Heart Rate Zone card ──────────────────────────────────────
-            _HeartRateZoneCard(vm: vm),
           ],
         ),
       ),
     );
   }
 }
-
-// ─── Pause / Play Button ──────────────────────────────────────────────────────
 
 class _PausePlayButton extends StatelessWidget {
   final ActiveRunViewModel vm;
@@ -680,8 +663,6 @@ class _PausePlayButton extends StatelessWidget {
   }
 }
 
-// ─── Run Metric ───────────────────────────────────────────────────────────────
-
 class _RunMetric extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -703,14 +684,12 @@ class _RunMetric extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(left: isRight ? 20 : 0, right: isRight ? 0 : 20),
       child: Column(
-        crossAxisAlignment: isRight
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+        crossAxisAlignment:
+            isRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: isRight
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
+            mainAxisAlignment:
+                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
             children: [
               Icon(icon, size: 16, color: AppColors.primary),
               const SizedBox(width: 6),
@@ -719,9 +698,8 @@ class _RunMetric extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Row(
-            mainAxisAlignment: isRight
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
+            mainAxisAlignment:
+                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
@@ -738,103 +716,6 @@ class _RunMetric extends StatelessWidget {
                 Text(unit, style: AppTextStyles.bodyMedium),
               ],
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Heart Rate Zone Card ─────────────────────────────────────────────────────
-
-class _HeartRateZoneCard extends StatelessWidget {
-  final ActiveRunViewModel vm;
-  const _HeartRateZoneCard({required this.vm});
-
-  // Colors per zone segment
-  static const _segmentColors = [
-    Color(0xFF80D8FF), // Z1 blue
-    Color(0xFF69F0AE), // Z2 green
-    Color(0xFF48E5D0), // Z3 teal
-    AppColors.primaryContainer, // Z4 primary teal
-    Color(0xFFFF7043), // Z5 red
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final zone = vm.heartRateZone;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          // Heart icon
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.favorite_rounded,
-              color: AppColors.primary,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // BPM
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${vm.heartRateBpm}',
-                style: AppTextStyles.titleLarge.copyWith(
-                  color: AppColors.onSurface,
-                  fontSize: 22,
-                ),
-              ),
-              Text('BPM', style: AppTextStyles.labelSmall),
-            ],
-          ),
-          const SizedBox(width: 16),
-
-          // Zone bar segments
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'ZONE ${zone.number}: ${zone.label}',
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.primary,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: List.generate(5, (i) {
-                    final filled = i < vm.filledZoneSegments;
-                    return Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: filled
-                              ? _segmentColors[i]
-                              : AppColors.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ],
-            ),
           ),
         ],
       ),

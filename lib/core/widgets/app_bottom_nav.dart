@@ -22,11 +22,6 @@ class AppBottomNav extends StatelessWidget {
       label: 'History',
     ),
     (
-      icon: Icons.military_tech_outlined,
-      activeIcon: Icons.military_tech_rounded,
-      label: 'Progress',
-    ),
-    (
       icon: Icons.person_outline_rounded,
       activeIcon: Icons.person_rounded,
       label: 'Profile',

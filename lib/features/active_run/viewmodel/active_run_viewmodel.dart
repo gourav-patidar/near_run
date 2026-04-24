@@ -1,25 +1,23 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../core/models/run_model.dart';
 import '../../../core/services/gps_tracking_service.dart';
-import '../../../core/services/database_service.dart';
 
-// ─── Heart Rate Zone ──────────────────────────────────────────────────────────
+// ─── Heart rate zones (no BT sensor — kept for future use) ───────────────────
 
 enum HeartRateZone {
-  easy(1, 'EASY', 'Zone 1'),
-  fatBurn(2, 'FAT BURN', 'Zone 2'),
-  aerobic(3, 'AEROBIC', 'Zone 3'),
-  anaerobic(4, 'ANAEROBIC', 'Zone 4'),
-  maximal(5, 'MAX EFFORT', 'Zone 5');
+  easy(1, 'EASY'),
+  fatBurn(2, 'FAT BURN'),
+  aerobic(3, 'AEROBIC'),
+  anaerobic(4, 'ANAEROBIC'),
+  maximal(5, 'MAX EFFORT');
 
   final int number;
   final String label;
-  final String fullLabel;
-  const HeartRateZone(this.number, this.label, this.fullLabel);
+  const HeartRateZone(this.number, this.label);
 
   static HeartRateZone fromBpm(int bpm) {
     if (bpm < 115) return HeartRateZone.easy;
@@ -30,77 +28,83 @@ enum HeartRateZone {
   }
 }
 
-// ─── Run State ────────────────────────────────────────────────────────────────
+// ─── Run state ────────────────────────────────────────────────────────────────
 
-enum RunState { idle, running, paused, stopped }
+enum RunState { initializing, running, paused, stopped, error }
 
 // ─── ViewModel ────────────────────────────────────────────────────────────────
 
 class ActiveRunViewModel extends ChangeNotifier {
-  final GpsTrackingService _gpsService = GpsTrackingService.instance;
-  final DatabaseService _dbService = DatabaseService.instance;
-
-  // Map controller
+  final GpsTrackingService _gps = GpsTrackingService.instance;
   final MapController mapController = MapController();
 
-  // ── Run state ───────────────────────────────────────────────────────────────
-  RunState _runState = RunState.idle;
-  RunState get runState => _runState;
+  // ── State ───────────────────────────────────────────────────────────────────
+  RunState _state = RunState.initializing;
+  RunState get state => _state;
 
-  bool get isRunning => _runState == RunState.running;
-  bool get isPaused => _runState == RunState.paused;
-  bool get isStopped => _runState == RunState.stopped;
-  bool get isIdle => _runState == RunState.idle;
+  bool get isInitializing => _state == RunState.initializing;
+  bool get isRunning => _state == RunState.running;
+  bool get isPaused => _state == RunState.paused;
+  bool get isStopped => _state == RunState.stopped;
+  bool get hasError => _state == RunState.error;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  // ── GPS & Route data ────────────────────────────────────────────────────────
+  bool _needsAppSettings = false;
+  bool get needsAppSettings => _needsAppSettings;
+
+  bool _needsLocationService = false;
+  bool get needsLocationService => _needsLocationService;
+
+  // ── Route + position ────────────────────────────────────────────────────────
   final List<LocationPoint> _routePoints = [];
   List<LatLng> get routeLatLngs => _routePoints.map((p) => p.position).toList();
 
   LatLng? _currentPosition;
   LatLng? get currentPosition => _currentPosition;
 
-  StreamSubscription<LocationPoint>? _locationSubscription;
+  StreamSubscription<LocationPoint>? _locationSub;
 
-  // ── Run metrics ─────────────────────────────────────────────────────────────
+  // ── Metrics ─────────────────────────────────────────────────────────────────
   DateTime? _startTime;
-  DateTime? _pauseTime;
-  int _pausedDuration = 0; // Total paused duration in seconds
+  DateTime? _pauseStart;
+  int _pausedSeconds = 0;
 
-  double _distanceMeters = 0.0;
+  double _distanceMeters = 0;
   double get distanceKm => _distanceMeters / 1000;
+
+  double _elevationGainMeters = 0;
+  int get elevationMeters => _elevationGainMeters.round();
+  double get elevationProgress => (_elevationGainMeters / 300).clamp(0.0, 1.0);
 
   int get elapsedSeconds {
     if (_startTime == null) return 0;
-    if (_runState == RunState.paused && _pauseTime != null) {
-      return _pauseTime!.difference(_startTime!).inSeconds - _pausedDuration;
-    }
-    return DateTime.now().difference(_startTime!).inSeconds - _pausedDuration;
+    final now = (_state == RunState.paused && _pauseStart != null)
+        ? _pauseStart!
+        : DateTime.now();
+    return now.difference(_startTime!).inSeconds - _pausedSeconds;
   }
 
-  // ── Distance formatting ─────────────────────────────────────────────────────
-  String get distanceFormatted => distanceKm.toStringAsFixed(2);
+  int get paceSeconds {
+    if (distanceKm == 0) return 0;
+    return (elapsedSeconds / distanceKm).round();
+  }
+
+  // ── Formatters ──────────────────────────────────────────────────────────────
   String get distanceWhole => distanceKm.toStringAsFixed(0);
   String get distanceDecimal =>
       '.${distanceKm.toStringAsFixed(2).split('.')[1]}';
 
-  // ── Duration formatting ─────────────────────────────────────────────────────
   String get durationFormatted {
-    final h = elapsedSeconds ~/ 3600;
-    final m = (elapsedSeconds % 3600) ~/ 60;
-    final s = elapsedSeconds % 60;
+    final s = elapsedSeconds;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
     if (h > 0) {
-      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
     }
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  // ── Pace ────────────────────────────────────────────────────────────────────
-  int get paceSeconds {
-    if (distanceKm == 0) return 0;
-    return (elapsedSeconds / distanceKm).round();
+    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
   String get paceFormatted {
@@ -110,154 +114,142 @@ class ActiveRunViewModel extends ChangeNotifier {
     return '$m\'${s.toString().padLeft(2, '0')}"';
   }
 
-  // ── Elevation ───────────────────────────────────────────────────────────────
-  double _elevationGainMeters = 0.0;
-  int get elevationMeters => _elevationGainMeters.round();
-  double get elevationProgress => (_elevationGainMeters / 300).clamp(0.0, 1.0);
-
-  // ── Heart Rate (placeholder - would need bluetooth HR monitor) ──────────────
-  int _heartRateBpm = 0;
+  // Heart rate is placeholder until BT HR sensor is added.
+  final int _heartRateBpm = 0;
   int get heartRateBpm => _heartRateBpm;
   HeartRateZone get heartRateZone => HeartRateZone.fromBpm(_heartRateBpm);
   int get filledZoneSegments => heartRateZone.number;
 
-  // ── Timers ──────────────────────────────────────────────────────────────────
-  Timer? _updateTimer;
+  Timer? _uiTimer;
 
-  // ── Init ────────────────────────────────────────────────────────────────────
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
   ActiveRunViewModel() {
-    _initializeRun();
+    _initialize();
   }
 
-  Future<void> _initializeRun() async {
-    _runState = RunState.idle;
+  Future<void> _initialize() async {
+    _state = RunState.initializing;
     _errorMessage = null;
+    _needsAppSettings = false;
+    _needsLocationService = false;
     notifyListeners();
 
     try {
-      // Initialize foreground task
-      await _gpsService.initForegroundTask();
+      WakelockPlus.enable();
+      await _gps.initForegroundTask();
 
-      // Check and request permissions with proper UI feedback
-      debugPrint('Checking location permissions...');
-      final hasPermission = await _gpsService.checkPermissions();
-
-      if (!hasPermission) {
-        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) {
-          _errorMessage =
-              'Location services are disabled. Please enable GPS in your device settings.';
-        } else {
-          _errorMessage =
-              'Location permission is required to track your run. Please grant permission in settings.';
+      final result = await _gps.requestPermissions();
+      if (!result.isGranted) {
+        switch (result.state) {
+          case GpsPermissionState.serviceDisabled:
+            _errorMessage =
+                'Location services are off. Please turn on GPS in your device settings.';
+            _needsLocationService = true;
+          case GpsPermissionState.deniedPermanently:
+            _errorMessage =
+                'Location access is blocked for NearRun. Open settings and allow Location (ideally "Allow all the time") to track runs.';
+            _needsAppSettings = true;
+          case GpsPermissionState.deniedTemporarily:
+            _errorMessage =
+                'Location access was denied. Tap Start Run again and allow location to record your route.';
+          case GpsPermissionState.granted:
+            break;
         }
-        _runState = RunState.stopped;
+        _state = RunState.error;
         notifyListeners();
         return;
       }
 
-      debugPrint('Location permission granted, getting initial position...');
-
-      // Get initial position
-      final initialPosition = await _gpsService.getCurrentPosition();
-      if (initialPosition != null) {
-        _currentPosition = initialPosition;
-        mapController.move(initialPosition, 16.0);
-        debugPrint(
-          'Initial position: ${initialPosition.latitude}, ${initialPosition.longitude}',
-        );
-      } else {
-        debugPrint('Could not get initial position, will wait for GPS updates');
+      // Try to center the map early. It's fine if this takes a moment.
+      final initial = await _gps.getCurrentPosition();
+      if (initial != null) {
+        _currentPosition = initial;
       }
 
-      // Start tracking
-      debugPrint('Starting GPS tracking...');
-      final started = await _gpsService.startTracking();
+      final started = await _gps.startTracking();
       if (!started) {
         _errorMessage =
-            'Failed to start GPS tracking. Please ensure location services are enabled and try again.';
-        _runState = RunState.stopped;
+            'Failed to start GPS tracking. Try toggling GPS off and on, then retry.';
+        _state = RunState.error;
         notifyListeners();
         return;
       }
 
-      // Listen to location updates
-      _locationSubscription = _gpsService.locationStream?.listen(
-        (locationPoint) {
-          _onLocationUpdate(locationPoint);
-        },
-        onError: (error) {
-          debugPrint('Location stream error: $error');
-        },
+      _locationSub = _gps.locationStream?.listen(
+        _onLocationUpdate,
+        onError: (e) => debugPrint('Location stream error: $e'),
       );
 
-      // Start the run
       _startTime = DateTime.now();
-      _runState = RunState.running;
+      _state = RunState.running;
 
-      // UI update timer (every second)
-      _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (_runState == RunState.running) {
-          _updateNotification();
+      _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_state == RunState.running) {
+          _pushNotification();
           notifyListeners();
         }
       });
 
-      debugPrint('Run initialized successfully');
       notifyListeners();
     } catch (e) {
-      debugPrint('Error initializing run: $e');
-      _errorMessage =
-          'An error occurred while starting the run. Please try again.';
-      _runState = RunState.stopped;
+      debugPrint('Run init failed: $e');
+      _errorMessage = 'Something went wrong starting your run: $e';
+      _state = RunState.error;
       notifyListeners();
     }
   }
 
-  // ── Handle location updates ─────────────────────────────────────────────────
   void _onLocationUpdate(LocationPoint point) {
-    if (_runState != RunState.running) return;
+    if (_state != RunState.running) {
+      // Keep the current position fresh even while paused, so the map
+      // doesn't feel frozen if the user is still moving.
+      _currentPosition = point.position;
+      notifyListeners();
+      return;
+    }
 
     _currentPosition = point.position;
 
-    // Calculate distance if we have a previous point
     if (_routePoints.isNotEmpty) {
-      final lastPoint = _routePoints.last;
-      final distance = const Distance().as(
+      final last = _routePoints.last;
+      final meters = const Distance().as(
         LengthUnit.Meter,
-        lastPoint.position,
+        last.position,
         point.position,
       );
 
-      // Only add point if moved at least 5 meters (reduces noise)
-      if (distance >= 5) {
-        _distanceMeters += distance;
-
-        // Calculate elevation gain
-        if (point.altitude != null && lastPoint.altitude != null) {
-          final elevationChange = point.altitude! - lastPoint.altitude!;
-          if (elevationChange > 0) {
-            _elevationGainMeters += elevationChange;
-          }
-        }
-
-        _routePoints.add(point);
-
-        // Center map on current position
-        mapController.move(point.position, mapController.camera.zoom);
+      // Ignore jitter. 3m is tighter than our 5m GPS filter and catches
+      // the few duplicate points that still slip through on some chipsets.
+      if (meters < 3) {
+        _currentPosition = point.position;
+        notifyListeners();
+        return;
       }
-    } else {
-      // First point
-      _routePoints.add(point);
-      mapController.move(point.position, 16.0);
+
+      _distanceMeters += meters;
+
+      if (point.altitude != null && last.altitude != null) {
+        final delta = point.altitude! - last.altitude!;
+        if (delta > 0) _elevationGainMeters += delta;
+      }
     }
 
+    _routePoints.add(point);
+    _safeMoveMap(point.position);
     notifyListeners();
   }
 
-  // ── Update notification ─────────────────────────────────────────────────────
-  void _updateNotification() {
-    _gpsService.updateNotification(
+  void _safeMoveMap(LatLng target) {
+    try {
+      final currentZoom = mapController.camera.zoom;
+      mapController.move(target, currentZoom < 14 ? 16.0 : currentZoom);
+    } catch (_) {
+      // Map widget may not be mounted on the very first tick.
+    }
+  }
+
+  void _pushNotification() {
+    _gps.updateNotification(
       distance: distanceKm.toStringAsFixed(2),
       duration: durationFormatted,
       pace: paceFormatted,
@@ -267,75 +259,58 @@ class ActiveRunViewModel extends ChangeNotifier {
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   void togglePause() {
-    if (_runState == RunState.running) {
-      _runState = RunState.paused;
-      _pauseTime = DateTime.now();
-    } else if (_runState == RunState.paused) {
-      if (_pauseTime != null && _startTime != null) {
-        _pausedDuration += DateTime.now().difference(_pauseTime!).inSeconds;
+    if (_state == RunState.running) {
+      _state = RunState.paused;
+      _pauseStart = DateTime.now();
+    } else if (_state == RunState.paused) {
+      if (_pauseStart != null) {
+        _pausedSeconds += DateTime.now().difference(_pauseStart!).inSeconds;
       }
-      _runState = RunState.running;
-      _pauseTime = null;
+      _pauseStart = null;
+      _state = RunState.running;
     }
-    notifyListeners();
-  }
-
-  Future<void> stopRun() async {
-    if (_runState == RunState.stopped || _startTime == null) return;
-
-    _runState = RunState.stopped;
-
-    // Stop GPS tracking
-    await _gpsService.stopTracking();
-    _updateTimer?.cancel();
-    _locationSubscription?.cancel();
-
-    // Save run to database
-    if (_routePoints.isNotEmpty && _distanceMeters > 50) {
-      final run = RunModel(
-        startTime: _startTime!,
-        endTime: DateTime.now(),
-        distanceMeters: _distanceMeters,
-        durationSeconds: elapsedSeconds,
-        routePoints: routeLatLngs,
-        avgPaceSecondsPerKm: paceSeconds.toDouble(),
-        elevationGainMeters: _elevationGainMeters,
-        avgHeartRate: _heartRateBpm > 0 ? _heartRateBpm : null,
-      );
-
-      await _dbService.createRun(run);
-      debugPrint(
-        'Run saved: ${distanceKm.toStringAsFixed(2)} km in $durationFormatted',
-      );
-    }
-
     notifyListeners();
   }
 
   void recenterMap() {
-    if (_currentPosition != null) {
-      try {
-        final currentZoom = mapController.camera.zoom;
-        mapController.move(
-          _currentPosition!,
-          currentZoom > 14 ? currentZoom : 16.0,
-        );
-        debugPrint(
-          'Map recentered to: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
-        );
-      } catch (e) {
-        debugPrint('Error recentering map: $e');
-      }
-    } else {
-      debugPrint('No current position to recenter to');
+    if (_currentPosition != null) _safeMoveMap(_currentPosition!);
+  }
+
+  /// Stops tracking and returns an unsaved RunModel so the caller can
+  /// navigate to the summary. Returns null if the run was too short to
+  /// be meaningful (<50m recorded).
+  Future<RunModel?> stopAndBuildRun() async {
+    if (_state == RunState.stopped) return null;
+    _state = RunState.stopped;
+    notifyListeners();
+
+    _uiTimer?.cancel();
+    await _locationSub?.cancel();
+    await _gps.stopTracking();
+    WakelockPlus.disable();
+
+    if (_startTime == null || _distanceMeters < 50 || _routePoints.length < 2) {
+      return null;
     }
+
+    return RunModel(
+      startTime: _startTime!,
+      endTime: DateTime.now(),
+      distanceMeters: _distanceMeters,
+      durationSeconds: elapsedSeconds,
+      routePoints: routeLatLngs,
+      avgPaceSecondsPerKm: paceSeconds.toDouble(),
+      elevationGainMeters: _elevationGainMeters,
+      avgHeartRate: _heartRateBpm > 0 ? _heartRateBpm : null,
+    );
   }
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
-    _locationSubscription?.cancel();
-    _gpsService.stopTracking();
+    _uiTimer?.cancel();
+    _locationSub?.cancel();
+    _gps.stopTracking();
+    WakelockPlus.disable();
     super.dispose();
   }
 }

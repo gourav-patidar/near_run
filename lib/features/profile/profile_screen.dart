@@ -146,24 +146,6 @@ class _AvatarSection extends StatelessWidget {
                 color: Color(0xFF90CAF9),
               ),
             ),
-            // Edit badge
-            Positioned(
-              bottom: 4,
-              right: 4,
-              child: GestureDetector(
-                onTap: vm.onEditProfile,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary,
-                  ),
-                  child: const Icon(Icons.edit_rounded,
-                      size: 14, color: Colors.white),
-                ),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -408,29 +390,56 @@ class _BadgesSection extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            GestureDetector(
-              onTap: vm.onViewAllBadges,
-              child: Text(
-                'VIEW ALL',
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: AppColors.primary,
-                  letterSpacing: 0.8,
+            if (vm.streakDays > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryContainer.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  '${vm.streakDays} DAY STREAK',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: vm.badges
-              .map((b) => Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _BadgeChip(badge: b),
-                    ),
-                  ))
-              .toList(),
-        ),
+        if (vm.badges.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.emoji_events_outlined,
+                    size: 32, color: AppColors.onSurfaceVariant),
+                const SizedBox(height: 8),
+                Text(
+                  'Record your first run to unlock badges.',
+                  style: AppTextStyles.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        else
+          Row(
+            children: vm.badges
+                .map((b) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: _BadgeChip(badge: b),
+                      ),
+                    ))
+                .toList(),
+          ),
       ],
     );
   }

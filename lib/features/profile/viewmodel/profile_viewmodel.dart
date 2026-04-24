@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/models/run_model.dart';
+import '../../../core/services/database_service.dart';
 
 // ─── Badge Model ──────────────────────────────────────────────────────────────
 
@@ -18,10 +20,10 @@ class BadgeModel {
   });
 }
 
-// ─── Weekly Intensity Bar Model ───────────────────────────────────────────────
+// ─── Weekly Bar Model ─────────────────────────────────────────────────────────
 
 class WeeklyBarModel {
-  final String dayLabel; // e.g. "M", "T"
+  final String dayLabel;
   final double intensity; // 0.0 – 1.0
   final bool isToday;
   final String colorHex;
@@ -29,123 +31,194 @@ class WeeklyBarModel {
   const WeeklyBarModel({
     required this.dayLabel,
     required this.intensity,
-    this.isToday = false,
     required this.colorHex,
+    this.isToday = false,
   });
 }
+
+const _dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 // ─── ViewModel ────────────────────────────────────────────────────────────────
 
 class ProfileViewModel extends ChangeNotifier {
-  bool _isLoading = false;
+  final DatabaseService _db = DatabaseService.instance;
+
+  bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  // ── User info ───────────────────────────────────────────────────────────────
-  String _name = 'Marcus Thorne';
-  String get name => _name;
+  final String name = 'Runner';
+  String get subtitle {
+    final dist = _stats.totalDistanceKm;
+    final tier = dist >= 500
+        ? 'MARATHON ELITE'
+        : dist >= 200
+            ? 'TRAIL BLAZER'
+            : dist >= 50
+                ? 'ROAD READY'
+                : 'BEGINNER';
+    final level = 1 + (dist ~/ 10);
+    return '$tier  •  LEVEL $level';
+  }
 
-  String _tier = 'MARATHON ELITE';
-  String get tier => _tier;
+  RunStats _stats = RunStats.empty;
+  RunStats get stats => _stats;
 
-  int _level = 24;
-  int get level => _level;
+  String get totalDistanceFormatted => _stats.totalDistanceKm.toStringAsFixed(0);
+  int get totalRuns => _stats.totalRuns;
 
-  String get subtitle => '$_tier  •  LEVEL $_level';
+  int _streakDays = 0;
+  int get streakDays => _streakDays;
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
-  double _totalDistanceKm = 187;
-  double get totalDistanceKm => _totalDistanceKm;
-  String get totalDistanceFormatted =>
-      _totalDistanceKm.toStringAsFixed(0);
-
-  int _totalRuns = 24;
-  int get totalRuns => _totalRuns;
-
-  // ── Weekly intensity ────────────────────────────────────────────────────────
   List<WeeklyBarModel> _weeklyBars = [];
   List<WeeklyBarModel> get weeklyBars => List.unmodifiable(_weeklyBars);
 
-  // ── Badges ──────────────────────────────────────────────────────────────────
   List<BadgeModel> _badges = [];
   List<BadgeModel> get badges => List.unmodifiable(_badges);
 
-  // ── Daily goal ──────────────────────────────────────────────────────────────
-  double _dailyGoalPercent = 0.85;
-  double get dailyGoalPercent => _dailyGoalPercent;
-  String get dailyGoalLabel =>
-      '${(_dailyGoalPercent * 100).toStringAsFixed(0)}%';
-
-  // ── Avg BPM ─────────────────────────────────────────────────────────────────
-  int _avgBpm = 142;
-  int get avgBpm => _avgBpm;
-
+  int get avgBpm => _stats.avgHeartRate ?? 0;
   String get bpmZoneLabel {
-    if (_avgBpm < 115) return 'ZONE 1 EASY';
-    if (_avgBpm < 135) return 'ZONE 2 FAT BURN';
-    if (_avgBpm < 155) return 'ZONE 3 ACTIVE';
-    if (_avgBpm < 175) return 'ZONE 4 ANAEROBIC';
+    if (avgBpm == 0) return 'NO HR DATA';
+    if (avgBpm < 115) return 'ZONE 1 EASY';
+    if (avgBpm < 135) return 'ZONE 2 FAT BURN';
+    if (avgBpm < 155) return 'ZONE 3 ACTIVE';
+    if (avgBpm < 175) return 'ZONE 4 ANAEROBIC';
     return 'ZONE 5 MAX';
   }
 
-  // ── Init ────────────────────────────────────────────────────────────────────
+  /// Target: 5km/day as a nice round goal. Percentage of today's distance
+  /// toward it, capped at 100%.
+  double _dailyGoalPercent = 0;
+  double get dailyGoalPercent => _dailyGoalPercent;
+  String get dailyGoalLabel => '${(_dailyGoalPercent * 100).round()}%';
+
   ProfileViewModel() {
     _load();
   }
 
   Future<void> _load() async {
-    _setLoading(true);
-    await Future.delayed(const Duration(milliseconds: 400));
+    _isLoading = true;
+    notifyListeners();
 
-    _weeklyBars = const [
-      WeeklyBarModel(dayLabel: 'M', intensity: 0.55, colorHex: '#48E5D0'),
-      WeeklyBarModel(dayLabel: 'T', intensity: 0.70, colorHex: '#48E5D0'),
-      WeeklyBarModel(
-          dayLabel: 'W', intensity: 0.95, isToday: false, colorHex: '#00C853'),
-      WeeklyBarModel(
-          dayLabel: 'T', intensity: 1.0, isToday: true, colorHex: '#00C853'),
-      WeeklyBarModel(dayLabel: 'F', intensity: 0.60, colorHex: '#40C4FF'),
-      WeeklyBarModel(dayLabel: 'S', intensity: 0.15, colorHex: '#BDBDBD'),
-      WeeklyBarModel(dayLabel: 'S', intensity: 0.45, colorHex: '#FF5252'),
-    ];
+    try {
+      final results = await Future.wait([
+        _db.getStats(),
+        _db.getLast7DaysDistance(),
+        _db.getCurrentStreak(),
+      ]);
+      _stats = results[0] as RunStats;
+      final weekly = results[1] as List<DailyDistance>;
+      _streakDays = results[2] as int;
 
-    _badges = const [
-      BadgeModel(
-        id: 'fast_start',
-        title: 'FAST\nSTART',
-        icon: BadgeIcon.fastStart,
-        bgColorHex: '#FFE0E0',
-      ),
-      BadgeModel(
-        id: 'hill_climber',
-        title: 'HILL\nCLIMBER',
-        icon: BadgeIcon.hillClimber,
-        bgColorHex: '#C8F5E8',
-      ),
-      BadgeModel(
-        id: '7_day_streak',
-        title: '7 DAY\nSTREAK',
-        icon: BadgeIcon.sevenDayStreak,
-        bgColorHex: '#E3F2FD',
-      ),
-    ];
+      _weeklyBars = _buildWeeklyBars(weekly);
+      _badges = _deriveBadges(_stats, _streakDays);
+      _dailyGoalPercent = _computeDailyGoal(weekly);
+    } catch (e) {
+      debugPrint('ProfileViewModel load failed: $e');
+      _stats = RunStats.empty;
+      _weeklyBars = _buildWeeklyBars(const []);
+      _badges = const [];
+      _dailyGoalPercent = 0;
+    }
 
-    _setLoading(false);
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<void> refresh() => _load();
 
-  void onEditProfile() {
-    // TODO: Navigate to EditProfileScreen
-    debugPrint('Edit profile tapped');
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  List<WeeklyBarModel> _buildWeeklyBars(List<DailyDistance> daily) {
+    // `daily` is oldest → newest for the last 7 days. Normalize to the
+    // week's max run so the tallest bar fills the chart.
+    if (daily.length != 7) {
+      // Fall back to empty week.
+      final todayIdx = (DateTime.now().weekday - 1).clamp(0, 6);
+      return List.generate(
+        7,
+        (i) => WeeklyBarModel(
+          dayLabel: _dayLetters[i],
+          intensity: 0,
+          isToday: i == todayIdx,
+          colorHex: '#BDBDBD',
+        ),
+      );
+    }
+
+    final maxKm = daily.map((d) => d.distanceKm).fold<double>(
+          0,
+          (prev, curr) => curr > prev ? curr : prev,
+        );
+
+    final today = DateTime.now();
+    final todayKey = DateTime(today.year, today.month, today.day);
+
+    return List.generate(7, (i) {
+      final day = daily[i];
+      final dayKey = DateTime(day.date.year, day.date.month, day.date.day);
+      final isToday = dayKey == todayKey;
+      final intensity = maxKm == 0 ? 0.0 : (day.distanceKm / maxKm).clamp(0.0, 1.0);
+
+      String color;
+      if (intensity == 0) {
+        color = '#BDBDBD';
+      } else if (intensity < 0.4) {
+        color = '#48E5D0';
+      } else if (intensity < 0.75) {
+        color = '#40C4FF';
+      } else {
+        color = '#00C853';
+      }
+
+      return WeeklyBarModel(
+        dayLabel: _dayLetters[day.date.weekday - 1],
+        intensity: intensity,
+        isToday: isToday,
+        colorHex: color,
+      );
+    });
   }
 
-  void onViewAllBadges() {
-    // TODO: Navigate to BadgesScreen
-    debugPrint('View all badges tapped');
+  double _computeDailyGoal(List<DailyDistance> daily) {
+    if (daily.isEmpty) return 0;
+    final todayKm = daily.last.distanceKm;
+    return (todayKm / 5.0).clamp(0.0, 1.0);
   }
 
-  void _setLoading(bool v) {
-    _isLoading = v;
-    notifyListeners();
+  List<BadgeModel> _deriveBadges(RunStats stats, int streak) {
+    final out = <BadgeModel>[];
+    if (stats.totalRuns >= 1) {
+      out.add(const BadgeModel(
+        id: 'first_run',
+        title: 'FIRST\nRUN',
+        icon: BadgeIcon.fastStart,
+        bgColorHex: '#FFE0E0',
+      ));
+    }
+    if (stats.totalDistanceKm >= 50) {
+      out.add(const BadgeModel(
+        id: 'hill_climber',
+        title: '50 KM\nCLUB',
+        icon: BadgeIcon.hillClimber,
+        bgColorHex: '#C8F5E8',
+      ));
+    }
+    if (streak >= 7) {
+      out.add(const BadgeModel(
+        id: '7_day_streak',
+        title: '7 DAY\nSTREAK',
+        icon: BadgeIcon.sevenDayStreak,
+        bgColorHex: '#E3F2FD',
+      ));
+    }
+    if (stats.avgPaceSecondsPerKm != null && stats.avgPaceSecondsPerKm! < 330) {
+      out.add(const BadgeModel(
+        id: 'speed_demon',
+        title: 'SUB 5:30\nPACE',
+        icon: BadgeIcon.speedDemon,
+        bgColorHex: '#FFF0EC',
+      ));
+    }
+    return out.take(3).toList();
   }
 }

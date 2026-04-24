@@ -120,18 +120,97 @@ class DatabaseService {
 
   // ── Get statistics ──────────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> getStats() async {
+  Future<RunStats> getStats() async {
     final db = await database;
     final result = await db.rawQuery('''
-      SELECT 
+      SELECT
         COUNT(*) as total_runs,
-        SUM(distance_meters) as total_distance,
-        SUM(duration_seconds) as total_duration,
-        AVG(avg_pace_seconds_per_km) as avg_pace
+        COALESCE(SUM(distance_meters), 0) as total_distance,
+        COALESCE(SUM(duration_seconds), 0) as total_duration,
+        AVG(avg_pace_seconds_per_km) as avg_pace,
+        AVG(avg_heart_rate) as avg_heart_rate
       FROM runs
     ''');
 
-    return result.first;
+    final row = result.first;
+    return RunStats(
+      totalRuns: (row['total_runs'] as int?) ?? 0,
+      totalDistanceMeters: (row['total_distance'] as num?)?.toDouble() ?? 0,
+      totalDurationSeconds: (row['total_duration'] as int?) ?? 0,
+      avgPaceSecondsPerKm: (row['avg_pace'] as num?)?.toDouble(),
+      avgHeartRate: (row['avg_heart_rate'] as num?)?.round(),
+    );
+  }
+
+  // ── Weekly distance (last 7 days, oldest → newest) ─────────────────────────
+
+  Future<List<DailyDistance>> getLast7DaysDistance() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = today.subtract(const Duration(days: 6));
+
+    final db = await database;
+    final runs = await db.query(
+      'runs',
+      columns: ['start_time', 'distance_meters'],
+      where: 'start_time >= ?',
+      whereArgs: [start.millisecondsSinceEpoch],
+    );
+
+    final buckets = List<double>.filled(7, 0);
+    for (final run in runs) {
+      final startMs = run['start_time'] as int;
+      final runDate = DateTime.fromMillisecondsSinceEpoch(startMs);
+      final dayStart = DateTime(runDate.year, runDate.month, runDate.day);
+      final index = dayStart.difference(start).inDays;
+      if (index >= 0 && index < 7) {
+        buckets[index] += (run['distance_meters'] as num).toDouble();
+      }
+    }
+
+    return List.generate(
+      7,
+      (i) => DailyDistance(
+        date: start.add(Duration(days: i)),
+        distanceMeters: buckets[i],
+      ),
+    );
+  }
+
+  // ── Current daily streak (consecutive days ending today with a run) ────────
+
+  Future<int> getCurrentStreak() async {
+    final db = await database;
+    final rows = await db.query(
+      'runs',
+      columns: ['start_time'],
+      orderBy: 'start_time DESC',
+      limit: 365,
+    );
+    if (rows.isEmpty) return 0;
+
+    final days = rows
+        .map((r) {
+          final d = DateTime.fromMillisecondsSinceEpoch(r['start_time'] as int);
+          return DateTime(d.year, d.month, d.day);
+        })
+        .toSet();
+
+    final now = DateTime.now();
+    var cursor = DateTime(now.year, now.month, now.day);
+    // Allow streak to start either today or yesterday (so we don't break the
+    // streak at 00:01 before the user runs).
+    if (!days.contains(cursor)) {
+      cursor = cursor.subtract(const Duration(days: 1));
+      if (!days.contains(cursor)) return 0;
+    }
+
+    var streak = 0;
+    while (days.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
   }
 
   // ── Close database ──────────────────────────────────────────────────────────

@@ -122,6 +122,40 @@ class RunModel {
   }
 }
 
+// ─── Aggregated Stats ─────────────────────────────────────────────────────────
+
+class RunStats {
+  final int totalRuns;
+  final double totalDistanceMeters;
+  final int totalDurationSeconds;
+  final double? avgPaceSecondsPerKm;
+  final int? avgHeartRate;
+
+  const RunStats({
+    required this.totalRuns,
+    required this.totalDistanceMeters,
+    required this.totalDurationSeconds,
+    this.avgPaceSecondsPerKm,
+    this.avgHeartRate,
+  });
+
+  double get totalDistanceKm => totalDistanceMeters / 1000;
+
+  static const empty = RunStats(
+    totalRuns: 0,
+    totalDistanceMeters: 0,
+    totalDurationSeconds: 0,
+  );
+}
+
+class DailyDistance {
+  final DateTime date;
+  final double distanceMeters;
+  const DailyDistance({required this.date, required this.distanceMeters});
+
+  double get distanceKm => distanceMeters / 1000;
+}
+
 // ─── Location Point (used during active tracking) ────────────────────────────
 
 class LocationPoint {

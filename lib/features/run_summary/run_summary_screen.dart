@@ -1,24 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:near_run/core/theme/app_colors.dart';
-import 'package:near_run/core/theme/app_text_styles.dart';
-import 'package:near_run/features/run_summary/viewmodel/run_summary_viewmodel.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/run_model.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/route_preview.dart';
+import 'viewmodel/run_summary_viewmodel.dart';
 
 class RunSummaryScreen extends StatelessWidget {
-  final RunSummaryData? data;
+  final RunModel run;
 
-  const RunSummaryScreen({super.key, this.data});
+  /// When true, the run is already saved — show Delete / Close instead of
+  /// Save / Discard. Used when opening a run from history.
+  final bool isReadOnly;
+
+  const RunSummaryScreen({
+    super.key,
+    required this.run,
+    this.isReadOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => RunSummaryViewModel(data: data),
+      create: (_) => RunSummaryViewModel(run: run, isReadOnly: isReadOnly),
       child: const _RunSummaryView(),
     );
   }
 }
-
-// ─── Root View ────────────────────────────────────────────────────────────────
 
 class _RunSummaryView extends StatelessWidget {
   const _RunSummaryView();
@@ -32,51 +41,43 @@ class _RunSummaryView extends StatelessWidget {
           builder: (ctx, vm, __) => ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
-              _TopBar(),
+              const _TopBar(),
               const SizedBox(height: 16),
-
-              // ── Map recap card ──────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _MapRecapCard(location: vm.summary.location),
+                child: _MapRecapCard(points: vm.run.routePoints),
               ),
               const SizedBox(height: 24),
-
-              // ── Session Complete label + Run Recap header ───────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _RecapHeader(vm: vm),
               ),
               const SizedBox(height: 20),
-
-              // ── Big stat cards ──────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
                     _BigStatCard(
                       label: 'DISTANCE',
-                      value: vm.summary.distanceFormatted,
+                      value: vm.run.distanceFormatted,
                       unit: 'km',
                     ),
                     const SizedBox(height: 12),
                     _BigStatCard(
                       label: 'TOTAL TIME',
-                      value: vm.summary.timeFormatted,
+                      value: vm.run.durationFormatted,
                       unit: '',
                     ),
                     const SizedBox(height: 12),
                     _BigStatCard(
                       label: 'AVG PACE',
-                      value: vm.summary.paceFormatted,
+                      value: vm.run.paceFormatted ?? '--',
                       unit: '/km',
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-
-              // ── Calories + Heart Rate row ───────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -84,39 +85,26 @@ class _RunSummaryView extends StatelessWidget {
                     Expanded(
                       child: _MiniStatCard(
                         label: 'CALORIES',
-                        value: vm.summary.calories.toString(),
+                        value: vm.estimatedCalories.toString(),
                         unit: 'kcal',
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _MiniStatCard(
-                        label: 'HEART RATE',
-                        value: vm.summary.avgHeartRate.toString(),
-                        unit: 'bpm',
+                        label: 'ELEVATION',
+                        value:
+                            (vm.run.elevationGainMeters ?? 0).round().toString(),
+                        unit: 'm',
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-
-              // ── Save / Discard actions ──────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    _PrimaryActionButton(
-                      label: vm.isSaving ? 'Saving...' : 'Save Run',
-                      onTap: vm.isSaving ? null : () => vm.saveRun(context),
-                    ),
-                    const SizedBox(height: 12),
-                    _SecondaryActionButton(
-                      label: 'Discard',
-                      onTap: () => vm.discardRun(context),
-                    ),
-                  ],
-                ),
+                child: _ActionButtons(vm: vm),
               ),
             ],
           ),
@@ -127,6 +115,8 @@ class _RunSummaryView extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
+  const _TopBar();
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -135,7 +125,7 @@ class _TopBar extends StatelessWidget {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(20),
-            onTap: () => Navigator.of(context).maybePop(),
+            onTap: () => Navigator.of(context).maybePop(false),
             child: const Padding(
               padding: EdgeInsets.all(6),
               child: Icon(
@@ -154,43 +144,21 @@ class _TopBar extends StatelessWidget {
 }
 
 class _MapRecapCard extends StatelessWidget {
-  final String location;
-
-  const _MapRecapCard({required this.location});
+  final List<dynamic> points; // List<LatLng> but typed loosely to avoid import
+  const _MapRecapCard({required this.points});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFE8F3EC), Color(0xFFDDECE3)],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: SizedBox(
+        height: 200,
+        width: double.infinity,
+        child: RoutePreview(
+          points: points.cast(),
+          background: const Color(0xFFE8F3EC),
+          strokeWidth: 5,
         ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(child: CustomPaint(painter: _RoutePainter())),
-          Positioned(
-            left: 18,
-            top: 18,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.92),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                location,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.onSurface,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -198,7 +166,6 @@ class _MapRecapCard extends StatelessWidget {
 
 class _RecapHeader extends StatelessWidget {
   final RunSummaryViewModel vm;
-
   const _RecapHeader({required this.vm});
 
   @override
@@ -206,11 +173,17 @@ class _RecapHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('SESSION COMPLETE', style: AppTextStyles.chipLabel),
+        Text(
+          vm.isReadOnly ? 'RUN DETAILS' : 'SESSION COMPLETE',
+          style: AppTextStyles.chipLabel,
+        ),
         const SizedBox(height: 8),
-        Text(vm.summary.runName, style: AppTextStyles.headlineMedium),
+        Text(vm.runName, style: AppTextStyles.headlineMedium),
         const SizedBox(height: 6),
-        Text(vm.summary.dateFormatted, style: AppTextStyles.bodyMedium),
+        Text(
+          DateFormat('EEE, MMM d • h:mm a').format(vm.run.startTime),
+          style: AppTextStyles.bodyMedium,
+        ),
       ],
     );
   }
@@ -302,6 +275,93 @@ class _MiniStatCard extends StatelessWidget {
   }
 }
 
+class _ActionButtons extends StatelessWidget {
+  final RunSummaryViewModel vm;
+  const _ActionButtons({required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    if (vm.isReadOnly) {
+      return Column(
+        children: [
+          _PrimaryActionButton(
+            label: 'Close',
+            onTap: () => Navigator.of(context).maybePop(false),
+          ),
+          const SizedBox(height: 12),
+          _SecondaryActionButton(
+            label: vm.isDeleting ? 'Deleting...' : 'Delete Run',
+            onTap: vm.isDeleting ? null : () => _confirmDelete(context),
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        _PrimaryActionButton(
+          label: vm.isSaving ? 'Saving...' : 'Save Run',
+          onTap: vm.isSaving ? null : () => vm.saveRun(context),
+        ),
+        const SizedBox(height: 12),
+        _SecondaryActionButton(
+          label: 'Discard',
+          onTap: vm.isSaving ? null : () => _confirmDiscard(context, vm),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete run?'),
+        content: const Text('This run will be permanently removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await vm.deleteRun(context);
+    }
+  }
+
+  Future<void> _confirmDiscard(BuildContext context, RunSummaryViewModel vm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Discard this run?'),
+        content: const Text(
+          'Your recorded route and stats will be thrown away.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      vm.discardRun(context);
+    }
+  }
+}
+
 class _PrimaryActionButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
@@ -331,7 +391,7 @@ class _PrimaryActionButton extends StatelessWidget {
 
 class _SecondaryActionButton extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _SecondaryActionButton({required this.label, required this.onTap});
 
@@ -353,56 +413,4 @@ class _SecondaryActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _RoutePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = Colors.white.withOpacity(0.35)
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final routePaint = Paint()
-      ..color = AppColors.primary
-      ..strokeWidth = 7
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path()
-      ..moveTo(size.width * 0.18, size.height * 0.70)
-      ..cubicTo(
-        size.width * 0.28,
-        size.height * 0.38,
-        size.width * 0.50,
-        size.height * 0.92,
-        size.width * 0.68,
-        size.height * 0.42,
-      )
-      ..cubicTo(
-        size.width * 0.74,
-        size.height * 0.26,
-        size.width * 0.86,
-        size.height * 0.34,
-        size.width * 0.88,
-        size.height * 0.18,
-      );
-
-    canvas.drawPath(path, roadPaint);
-    canvas.drawPath(path, routePaint);
-    canvas.drawCircle(
-      Offset(size.width * 0.18, size.height * 0.70),
-      7,
-      Paint()..color = AppColors.surface,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.88, size.height * 0.18),
-      8,
-      Paint()..color = AppColors.primary,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

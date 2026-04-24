@@ -1,111 +1,87 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/models/run_model.dart';
+import '../../../core/services/database_service.dart';
 
-// ─── Data Models (lightweight, home-screen scoped) ────────────────────────────
-
-class LastRunModel {
-  final double distanceKm;
-  final String duration; // e.g. "28'"
-  final String pace; // e.g. "5:24"
-  final String dateLabel; // e.g. "Tuesday, 6:15 AM"
-
-  const LastRunModel({
-    required this.distanceKm,
-    required this.duration,
-    required this.pace,
-    required this.dateLabel,
-  });
-}
-
-class WeatherModel {
-  final double temperatureCelsius;
-  final String city;
-  final String windSpeed; // e.g. "4 km/h NW"
-  final int humidityPercent;
-  final String condition; // e.g. "Partly Cloudy"
-
-  const WeatherModel({
-    required this.temperatureCelsius,
-    required this.city,
-    required this.windSpeed,
-    required this.humidityPercent,
-    required this.condition,
-  });
-}
+// ─── Lightweight tip model (rotated locally, no network) ──────────────────────
 
 class QuickTipModel {
   final String title;
   final String body;
-
   const QuickTipModel({required this.title, required this.body});
 }
+
+const _tips = [
+  QuickTipModel(
+    title: 'Pace yourself early.',
+    body:
+        'Starting 10% slower than your target pace builds stamina for a stronger finish.',
+  ),
+  QuickTipModel(
+    title: 'Land mid-foot.',
+    body:
+        'Heel-striking wastes energy and pounds your joints. Aim for the middle of your foot.',
+  ),
+  QuickTipModel(
+    title: 'Breathe in a rhythm.',
+    body:
+        'Try a 3:2 pattern — inhale for three steps, exhale for two. It steadies your heart rate.',
+  ),
+  QuickTipModel(
+    title: 'Cool down matters.',
+    body:
+        'Two minutes of easy walking after a run clears lactate faster than stopping cold.',
+  ),
+  QuickTipModel(
+    title: 'Hydrate the night before.',
+    body:
+        'Most runners are already dehydrated at the start. Water the evening before helps more than gulping at mile one.',
+  ),
+];
 
 // ─── ViewModel ────────────────────────────────────────────────────────────────
 
 class HomeViewModel extends ChangeNotifier {
-  // ── State ──────────────────────────────────────────────────────────────────
+  final DatabaseService _db = DatabaseService.instance;
 
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  String _userName = 'Marcus';
+  final String _userName = 'Runner';
   String get userName => _userName;
 
-  String _greetingSubtitle = 'The air is crisp, perfect for a 5k today.';
-  String get greetingSubtitle => _greetingSubtitle;
-
-  LastRunModel? _lastRun;
-  LastRunModel? get lastRun => _lastRun;
-
-  WeatherModel? _weather;
-  WeatherModel? get weather => _weather;
+  RunModel? _lastRun;
+  RunModel? get lastRun => _lastRun;
 
   QuickTipModel? _quickTip;
   QuickTipModel? get quickTip => _quickTip;
 
-  bool _isRunActive = false;
-  bool get isRunActive => _isRunActive;
-
-  // ── Initialization ─────────────────────────────────────────────────────────
-
   HomeViewModel() {
-    _init();
+    _load();
   }
 
-  Future<void> _init() async {
-    _setLoading(true);
+  Future<void> _load() async {
+    _isLoading = true;
+    notifyListeners();
 
-    // Simulated async data load — replace with sqflite / API calls later
-    await Future.delayed(const Duration(milliseconds: 600));
+    try {
+      final recent = await _db.getRecentRuns(1);
+      _lastRun = recent.isNotEmpty ? recent.first : null;
+    } catch (e) {
+      debugPrint('HomeViewModel load failed: $e');
+      _lastRun = null;
+    }
 
-    _lastRun = const LastRunModel(
-      distanceKm: 5.2,
-      duration: "28'",
-      pace: '5:24',
-      dateLabel: 'Tuesday, 6:15 AM',
+    // Rotate tip deterministically by day of year so it feels fresh
+    // without being random across rebuilds.
+    final dayOfYear = int.parse(
+      DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays.toString(),
     );
+    _quickTip = _tips[dayOfYear % _tips.length];
 
-    _weather = const WeatherModel(
-      temperatureCelsius: 18,
-      city: 'San Francisco',
-      windSpeed: '4 km/h NW',
-      humidityPercent: 62,
-      condition: 'Partly Cloudy',
-    );
-
-    _quickTip = const QuickTipModel(
-      title: 'Pace yourself early.',
-      body:
-          'Starting 10% slower than your target pace helps build stamina for a stronger finish.',
-    );
-
-    _greetingSubtitle = _buildSubtitle();
-
-    _setLoading(false);
+    _isLoading = false;
+    notifyListeners();
   }
 
-  // ── Computed ───────────────────────────────────────────────────────────────
-
-  /// Personalised greeting e.g. "Good morning, Marcus"
   String get greeting {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning, $_userName!';
@@ -113,57 +89,17 @@ class HomeViewModel extends ChangeNotifier {
     return 'Good evening, $_userName!';
   }
 
-  /// Formatted temperature string e.g. "18°C"
-  String get temperatureLabel {
-    if (_weather == null) return '--';
-    return '${_weather!.temperatureCelsius.toStringAsFixed(0)}°C';
-  }
-
-  /// Formatted distance e.g. "5.2"
-  String get lastRunDistance {
-    if (_lastRun == null) return '--';
-    return _lastRun!.distanceKm.toStringAsFixed(1);
-  }
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-
-  /// Called when user taps the big Start Run button
-  void onStartRunTapped() {
-    _isRunActive = true;
-    notifyListeners();
-    // Navigation happens in the view layer
-  }
-
-  /// Called when user taps notification bell
-  void onNotificationTapped() {
-    // TODO: Navigate to NotificationsScreen
-    debugPrint('Notifications tapped');
-  }
-
-  /// Refresh home data (pull-to-refresh or re-enter)
-  Future<void> refresh() async {
-    await _init();
-  }
-
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
-
-  String _buildSubtitle() {
+  String get greetingSubtitle {
     final hour = DateTime.now().hour;
-    final temp = _weather?.temperatureCelsius ?? 20;
-
     if (hour >= 5 && hour < 10) {
-      return 'The air is crisp — perfect for a morning run!';
+      return 'The air is crisp — perfect for a morning run.';
     } else if (hour >= 10 && hour < 17) {
-      return temp > 25
-          ? 'Stay hydrated — it\'s warm out there today.'
-          : 'Great conditions for hitting your target pace.';
-    } else {
-      return 'An evening run sounds like a great idea tonight.';
+      return 'Great conditions for hitting your target pace.';
+    } else if (hour >= 17 && hour < 21) {
+      return 'An evening run is a solid way to close out the day.';
     }
+    return 'Late night miles hit different. Stay safe out there.';
   }
+
+  Future<void> refresh() => _load();
 }

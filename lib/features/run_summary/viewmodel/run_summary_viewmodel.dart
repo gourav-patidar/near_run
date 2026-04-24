@@ -1,98 +1,82 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show BuildContext;
-
-// ─── Summary Model ────────────────────────────────────────────────────────────
-
-class RunSummaryData {
-  final double distanceKm;
-  final int totalSeconds;
-  final int avgPaceSeconds; // sec/km
-  final int calories;
-  final int avgHeartRate;
-  final String location;
-  final String runName;
-  final DateTime date;
-
-  const RunSummaryData({
-    required this.distanceKm,
-    required this.totalSeconds,
-    required this.avgPaceSeconds,
-    required this.calories,
-    required this.avgHeartRate,
-    required this.location,
-    required this.runName,
-    required this.date,
-  });
-
-  String get distanceFormatted => distanceKm.toStringAsFixed(2);
-
-  String get timeFormatted {
-    final h = totalSeconds ~/ 3600;
-    final m = (totalSeconds % 3600) ~/ 60;
-    final s = totalSeconds % 60;
-    if (h > 0) {
-      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  String get paceFormatted {
-    final m = avgPaceSeconds ~/ 60;
-    final s = avgPaceSeconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
-  String get dateFormatted {
-    const months = [
-      'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-      'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'
-    ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-}
-
-// ─── ViewModel ────────────────────────────────────────────────────────────────
+import 'package:flutter/material.dart' show BuildContext, Navigator;
+import '../../../core/models/run_model.dart';
+import '../../../core/services/database_service.dart';
 
 class RunSummaryViewModel extends ChangeNotifier {
-  final RunSummaryData summary;
+  final DatabaseService _db = DatabaseService.instance;
+
+  RunModel _run;
+  RunModel get run => _run;
+
+  /// True if the run is already persisted (viewing from history).
+  /// False after a just-completed run — then the view shows Save / Discard.
+  final bool isReadOnly;
 
   bool _isSaving = false;
   bool get isSaving => _isSaving;
 
-  bool _saved = false;
-  bool get saved => _saved;
+  bool _isDeleting = false;
+  bool get isDeleting => _isDeleting;
 
-  RunSummaryViewModel({RunSummaryData? data})
-      : summary = data ??
-            RunSummaryData(
-              distanceKm: 8.42,
-              totalSeconds: 42 * 60 + 15,
-              avgPaceSeconds: 5 * 60 + 1,
-              calories: 642,
-              avgHeartRate: 158,
-              location: 'MISSION DISTRICT',
-              runName: 'Morning Blaze',
-              date: DateTime(2023, 10, 24),
-            );
+  RunSummaryViewModel({required RunModel run, required this.isReadOnly})
+      : _run = run;
+
+  String get runName {
+    final h = _run.startTime.hour;
+    if (h < 10) return 'Morning Run';
+    if (h < 14) return 'Midday Run';
+    if (h < 18) return 'Afternoon Run';
+    if (h < 22) return 'Evening Run';
+    return 'Night Run';
+  }
+
+  /// Rough calorie estimate — without a real user weight we approximate at
+  /// 70kg and ~1 kcal/kg/km, which lands within ~15% of most trackers.
+  int get estimatedCalories {
+    const kgAssumed = 70;
+    return (_run.distanceKm * kgAssumed).round();
+  }
 
   Future<void> saveRun(BuildContext context) async {
-    if (_isSaving) return;
+    if (_isSaving || isReadOnly) return;
     _isSaving = true;
     notifyListeners();
 
-    // TODO: await RunRepository.insert(summary) using sqflite
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      _run = await _db.createRun(_run);
+    } catch (e) {
+      debugPrint('Save run failed: $e');
+      _isSaving = false;
+      notifyListeners();
+      return;
+    }
 
     _isSaving = false;
-    _saved = true;
     notifyListeners();
-
-    debugPrint('Run saved: ${summary.distanceFormatted} km');
-    // TODO: Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+    if (context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   void discardRun(BuildContext context) {
-    // TODO: Navigator.pop(context)
-    debugPrint('Run discarded');
+    Navigator.of(context).pop(false);
+  }
+
+  Future<void> deleteRun(BuildContext context) async {
+    if (!isReadOnly || _run.id == null || _isDeleting) return;
+    _isDeleting = true;
+    notifyListeners();
+    try {
+      await _db.deleteRun(_run.id!);
+    } catch (e) {
+      debugPrint('Delete run failed: $e');
+      _isDeleting = false;
+      notifyListeners();
+      return;
+    }
+    if (context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 }

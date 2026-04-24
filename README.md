@@ -1,208 +1,122 @@
-# 🏃 NearRun - Running Tracker App
+# NearRun
 
-A modern Flutter application for tracking running activities, monitoring distance, pace, and maintaining a comprehensive run history with statistics and personal bests.
+Offline-first run tracker built with Flutter. Records your GPS route, distance,
+pace, and elevation into a local SQLite database — no account, no internet
+required after the first app launch.
 
-## 📋 Project Overview
+## What it does
 
-NearRun is a feature-rich running tracker application built with Flutter. It allows users to:
-- Track active runs with real-time GPS location
-- View detailed run summaries and statistics
-- Maintain a history of all completed runs
-- Monitor personal performance metrics
-- Customize user profile settings
+- **Home** — big Start Run button, your most recent run's route, a rotating
+  training tip.
+- **Active run** — live map with OSM tiles, animated route polyline, pace /
+  duration / elevation stats, pause/resume, foreground notification so the
+  OS doesn't kill tracking when the screen locks.
+- **Run Summary** — shown after you stop a run. Choose Save or Discard. Also
+  reachable from History (Close / Delete) or the Last Run card on Home.
+- **History** — every saved run as a card with its real route drawn inline.
+- **Profile** — total distance, total runs, current day-streak, weekly
+  intensity bars, earned badges. All derived from your actual runs.
 
-## ✨ Features
-
-### 1. **Home Screen**
-   - Quick access to start/stop running activities
-   - Display of current run status
-   - Real-time metrics display
-
-### 2. **Active Run Tracking**
-   - GPS-based distance tracking using Geolocator
-   - Real-time pace and speed monitoring
-   - Run duration tracking
-   - Location permissions handling
-
-### 3. **Run History**
-   - Complete list of all recorded runs
-   - Sort and filter capabilities
-   - Date-based organization
-   - Quick access to run details
-
-### 4. **Run Summary & Statistics**
-   - Visual charts and graphs using FL Chart
-   - Performance trends and analytics
-   - Total distance, runs count, average pace
-   - Best run metrics
-
-### 5. **User Profile**
-   - Personal information management
-   - User preferences and settings
-   - Account customization
-
-## 🛠️ Tech Stack
-
-### Core Framework
-- **Flutter**: 3.35.5 (Channel: stable)
-- **Dart**: 3.9.2
-- **Target SDK**: 3.9.2+
-
-### State Management
-- **Provider** (v6.1.1) - Efficient state management solution
-
-### Location & Maps
-- **Geolocator** (v11.0.0) - GPS location tracking
-- **Permission Handler** (v11.2.0) - Runtime permissions management
-
-### Database
-- **SQLite** (v2.3.2) - Local data persistence
-- **Path Provider** (v2.1.2) - File system paths
-- **Path** (v1.9.0) - Path utilities
-
-### UI & Visualization
-- **FL Chart** (v0.66.2) - Advanced charts and graphs
-- **Persistent Bottom Navigation Bar** (v6.2.1) - Navigation UI
-- **Google Fonts** (v7.0.0) - Custom typography
-- **Material Design** - Standard UI components
-
-### Utilities
-- **Intl** (v0.19.0) - Internationalization and date formatting
-
-## 📁 Project Structure
+## Architecture
 
 ```
 lib/
-├── main.dart                      # Application entry point
+├── main.dart                        # App shell, 3-tab IndexedStack
 ├── core/
-│   ├── theme/                     # App theming and styles
-│   │   └── app_text_styles.dart   # Text styling definitions
+│   ├── models/run_model.dart        # RunModel, LocationPoint, RunStats
+│   ├── services/
+│   │   ├── gps_tracking_service.dart  # Permission flow + GPS stream
+│   │   └── database_service.dart      # sqflite CRUD + aggregates
+│   ├── theme/                       # M3 color + text theme
 │   └── widgets/
-│       └── app_bottom_nav.dart    # Bottom navigation bar
-├── features/
-│   ├── home/                      # Home screen feature
-│   │   └── home_screen.dart
-│   ├── active_run/                # Active run tracking feature
-│   ├── history/                   # Run history feature
-│   │   └── history_screen.dart
-│   ├── run_summary/               # Summary & statistics feature
-│   │   └── run_summary_screen.dart
-│   └── profile/                   # User profile feature
-│       └── profile_screen.dart
+│       ├── app_bottom_nav.dart      # Glass-blur 3-tab nav
+│       └── route_preview.dart       # Offline route renderer (canvas)
+└── features/
+    ├── home/                        # Start-run landing + last-run preview
+    ├── active_run/                  # Live GPS + map screen
+    ├── run_summary/                 # Post-run save/discard or read-only view
+    ├── history/                     # All saved runs
+    └── profile/                     # Stats, streak, badges, weekly bars
 ```
 
-## 🚀 Getting Started
+Each feature follows **view + ViewModel (`ChangeNotifier`)**, wired via
+`provider`. The services are singletons (`GpsTrackingService.instance`,
+`DatabaseService.instance`).
 
-### Prerequisites
-- Flutter SDK 3.35.5 or higher
-- Dart 3.9.2 or higher
-- Xcode (for iOS development)
-- Android Studio (for Android development)
+## Data flow at a glance
 
-### Installation
+1. User taps **Start Run** → `ActiveRunViewModel` requests location
+   permission, starts `flutter_foreground_task`, subscribes to the GPS stream.
+2. Every position update appends to an in-memory route and recomputes distance /
+   pace / elevation. UI rebuilds once per second.
+3. Long-press **Hold to Stop** → VM returns an unsaved `RunModel`; screen
+   pushes `RunSummaryScreen` with it.
+4. **Save** writes to SQLite via `DatabaseService.createRun`. **Discard**
+   throws it away.
+5. Home / History / Profile all read back from SQLite on focus.
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd near_run
-   ```
+## Offline-first design choices
 
-2. **Install dependencies**
-   ```bash
-   flutter pub get
-   ```
+- Maps: `flutter_map` + OpenStreetMap tiles. Missing tiles render blank so the
+  route polyline still shows. No network = still records runs.
+- Route previews in Home / History / Summary are drawn with a plain `CustomPainter` (`RoutePreview`). Zero tile fetches, works in airplane mode.
+- No analytics, crash reporters, weather APIs, or any other network call.
+- Database lives in the app's private storage — your runs stay on your device.
 
-3. **Run the application**
-   ```bash
-   flutter run
-   ```
+## Permissions
 
-### Platform-Specific Setup
+### Android
 
-#### iOS
+| Permission | Why |
+|---|---|
+| `ACCESS_FINE_LOCATION` | GPS route |
+| `ACCESS_COARSE_LOCATION` | Fallback / initial lock |
+| `ACCESS_BACKGROUND_LOCATION` | Tracking when screen is off (optional) |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_LOCATION` | Persistent GPS |
+| `POST_NOTIFICATIONS` | Android 13+ foreground-service notification |
+| `INTERNET` | Tile downloads (optional — app works offline) |
+| `WAKE_LOCK` | Keep CPU awake for GPS updates |
+
+The permission flow requests **foreground location first**. Background is
+*optional* — requested in the background, never blocks. This fixes the Samsung
+issue where chaining foreground + background requests caused the OS to swallow
+the prompt silently.
+
+### iOS
+
+- `NSLocationWhenInUseUsageDescription` + `NSLocationAlwaysUsageDescription`
+- `UIBackgroundModes: location`
+
+## Getting started
+
 ```bash
-cd ios/
-pod install
-cd ..
+flutter pub get
 flutter run
 ```
 
-#### Android
-- Ensure Android SDK is installed and configured
-- Update `local.properties` with your Android SDK path
-- Run with: `flutter run`
+Min Flutter version: 3.35.5 / Dart 3.9.2.
 
-## 📱 Supported Platforms
+## Limitations / not yet implemented
 
-- ✅ iOS (iPhone/iPad)
-- ✅ Android (Phone/Tablet)
-- ✅ Linux
-- ✅ macOS
-- ✅ Windows
-- ✅ Web
+- No Bluetooth heart-rate sensor integration (BPM is always 0; UI shows "no HR
+  data" in Profile).
+- OSM tiles are not persistently cached to disk. Once a region is loaded
+  you'll see it again in the same session, but after restart tiles re-download
+  when online. The route itself is always drawn from local data.
+- No user profile editing yet — the name defaults to "Runner".
 
-## 🔐 Permissions
+## Tech stack
 
-The app requires the following permissions:
+- `flutter` 3.35.5
+- `provider` — state management
+- `geolocator` + `permission_handler` — GPS + runtime permissions
+- `flutter_foreground_task` — background GPS survival on Android
+- `flutter_map` + `latlong2` — interactive map with OSM tiles
+- `sqflite` + `path_provider` — local persistence
+- `wakelock_plus` — keeps the screen awake during an active run
+- `intl` — date formatting
+- `google_fonts` — Plus Jakarta Sans typography
 
-### Android
-- `ACCESS_FINE_LOCATION` - Precise GPS location tracking
-- `ACCESS_COARSE_LOCATION` - Approximate location tracking
+## License
 
-### iOS
-- `NSLocationWhenInUseUsageDescription` - Location access while app is in use
-
-## 📊 Database Schema
-
-NearRun uses SQLite for local data storage with tables for:
-- User profile information
-- Run records (distance, duration, pace, location)
-- Run statistics and metrics
-
-## 🎨 Theming
-
-The app includes a comprehensive theming system in `core/theme/` with:
-- Light theme support
-- Custom text styles
-- Color schemes
-- Material Design compliance
-
-## 🧪 Testing
-
-Run tests with:
-```bash
-flutter test
-```
-
-Widget tests are available in the `test/` directory.
-
-## 📝 Build Information
-
-- **Version**: 1.0.0+1
-- **Publish Status**: Private (publish_to: 'none')
-
-## 🔄 Development Workflow
-
-1. Feature development follows the `features/` folder structure
-2. Core utilities and themes go in the `core/` folder
-3. All state management uses Provider pattern
-4. Material Design principles are followed for UI
-
-## 📚 Resources
-
-- [Flutter Documentation](https://docs.flutter.dev/)
-- [Provider Package](https://pub.dev/packages/provider)
-- [Geolocator Documentation](https://pub.dev/packages/geolocator)
-- [FL Chart Documentation](https://pub.dev/packages/fl_chart)
-
-## 📄 License
-
-This project is private and proprietary.
-
-## 👤 Author
-
-Developed by Gourav Dev Team
-
----
-
-**Happy Running! 🏃‍♂️**
+Private / proprietary.

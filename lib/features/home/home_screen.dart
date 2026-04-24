@@ -1,10 +1,14 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/run_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../home/viewmodel/home_viewmodel.dart';
+import '../../core/widgets/route_preview.dart';
 import '../active_run/active_run_screen.dart';
+import '../run_summary/run_summary_screen.dart';
+import 'viewmodel/home_viewmodel.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,8 +21,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
-// ─── Root View ────────────────────────────────────────────────────────────────
 
 class _HomeView extends StatelessWidget {
   const _HomeView();
@@ -51,13 +53,14 @@ class _HomeView extends StatelessWidget {
                 _GreetingSection(vm: vm),
                 const SizedBox(height: 32),
                 _StartRunButton(
-                  onTap: () {
-                    vm.onStartRunTapped();
-                    Navigator.of(context).push(
+                  onTap: () async {
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const ActiveRunScreen(),
                       ),
                     );
+                    // Reload last-run card when we come back.
+                    vm.refresh();
                   },
                 ),
                 const SizedBox(height: 36),
@@ -65,11 +68,10 @@ class _HomeView extends StatelessWidget {
                   _QuickTipCard(tip: vm.quickTip!),
                   const SizedBox(height: 16),
                 ],
-                if (vm.weather != null) ...[
-                  _WeatherCard(weather: vm.weather!),
-                  const SizedBox(height: 16),
-                ],
-                if (vm.lastRun != null) _LastRunCard(run: vm.lastRun!),
+                if (vm.lastRun != null)
+                  _LastRunCard(run: vm.lastRun!)
+                else
+                  const _NoRunsYetCard(),
               ],
             ),
           );
@@ -89,7 +91,7 @@ class _HomeView extends StatelessWidget {
             padding: EdgeInsets.only(
               top: MediaQuery.of(context).padding.top,
               left: 20,
-              right: 12,
+              right: 20,
             ),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.7),
@@ -102,7 +104,6 @@ class _HomeView extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Avatar
                 Container(
                   width: 40,
                   height: 40,
@@ -121,27 +122,7 @@ class _HomeView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // Brand title
                 Text('NearRun', style: AppTextStyles.brandTitle),
-
-                const Spacer(),
-
-                // Notification bell
-                Consumer<HomeViewModel>(
-                  builder: (_, vm, __) => IconButton(
-                    onPressed: vm.onNotificationTapped,
-                    icon: const Icon(
-                      Icons.notifications_outlined,
-                      color: AppColors.primary,
-                      size: 26,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.primary.withOpacity(0.08),
-                      shape: const CircleBorder(),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -151,7 +132,7 @@ class _HomeView extends StatelessWidget {
   }
 }
 
-// ─── Greeting Section ─────────────────────────────────────────────────────────
+// ─── Greeting ─────────────────────────────────────────────────────────────────
 
 class _GreetingSection extends StatelessWidget {
   final HomeViewModel vm;
@@ -170,7 +151,7 @@ class _GreetingSection extends StatelessWidget {
   }
 }
 
-// ─── Start Run Button ─────────────────────────────────────────────────────────
+// ─── Start Run button ─────────────────────────────────────────────────────────
 
 class _StartRunButton extends StatefulWidget {
   final VoidCallback onTap;
@@ -194,15 +175,13 @@ class _StartRunButtonState extends State<_StartRunButton>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _scaleAnim = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _scaleAnim = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
 
-    _glowAnim = Tween<double>(
-      begin: 0.2,
-      end: 0.45,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _glowAnim = Tween<double>(begin: 0.2, end: 0.45).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -222,7 +201,6 @@ class _StartRunButtonState extends State<_StartRunButton>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Ambient glow rings
                 Container(
                   width: 220,
                   height: 220,
@@ -237,8 +215,6 @@ class _StartRunButtonState extends State<_StartRunButton>
                     ],
                   ),
                 ),
-
-                // Outer ring (subtle)
                 Container(
                   width: 200,
                   height: 200,
@@ -250,8 +226,6 @@ class _StartRunButtonState extends State<_StartRunButton>
                     ),
                   ),
                 ),
-
-                // Main button
                 Transform.scale(
                   scale: _scaleAnim.value,
                   child: Container(
@@ -295,7 +269,7 @@ class _StartRunButtonState extends State<_StartRunButton>
   }
 }
 
-// ─── Quick Tip Card ───────────────────────────────────────────────────────────
+// ─── Quick Tip ────────────────────────────────────────────────────────────────
 
 class _QuickTipCard extends StatelessWidget {
   final QuickTipModel tip;
@@ -327,7 +301,6 @@ class _QuickTipCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Icon badge
                   Container(
                     width: 44,
                     height: 44,
@@ -341,8 +314,6 @@ class _QuickTipCard extends StatelessWidget {
                       size: 22,
                     ),
                   ),
-
-                  // "QUICK TIP" tag
                   Text('QUICK TIP', style: AppTextStyles.chipLabel),
                 ],
               ),
@@ -358,181 +329,110 @@ class _QuickTipCard extends StatelessWidget {
   }
 }
 
-// ─── Weather Card ─────────────────────────────────────────────────────────────
-
-class _WeatherCard extends StatelessWidget {
-  final WeatherModel weather;
-  const _WeatherCard({required this.weather});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Top row: temp + city
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.wb_cloudy_outlined,
-                    color: AppColors.primary,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${weather.temperatureCelsius.toStringAsFixed(0)}°C',
-                    style: AppTextStyles.headlineSmall,
-                  ),
-                ],
-              ),
-              Text(weather.city, style: AppTextStyles.bodyMedium),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Bottom row: wind + humidity
-          Row(
-            children: [
-              _WeatherDetail(icon: Icons.air_rounded, label: weather.windSpeed),
-              const SizedBox(width: 20),
-              _WeatherDetail(
-                icon: Icons.water_drop_outlined,
-                label: '${weather.humidityPercent}% Humidity',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeatherDetail extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _WeatherDetail({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.onSurfaceVariant, size: 18),
-        const SizedBox(width: 6),
-        Text(label, style: AppTextStyles.bodySmall),
-      ],
-    );
-  }
-}
-
-// ─── Last Run Recap Card ──────────────────────────────────────────────────────
+// ─── Last Run ─────────────────────────────────────────────────────────────────
 
 class _LastRunCard extends StatelessWidget {
-  final LastRunModel run;
+  final RunModel run;
   const _LastRunCard({required this.run});
+
+  String _dateLabel() {
+    final now = DateTime.now();
+    final runDay = DateTime(run.startTime.year, run.startTime.month, run.startTime.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(runDay).inDays;
+    if (diff == 0) return 'Today, ${DateFormat.jm().format(run.startTime)}';
+    if (diff == 1) return 'Yesterday, ${DateFormat.jm().format(run.startTime)}';
+    return DateFormat('EEE, MMM d • h:mm a').format(run.startTime);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => RunSummaryScreen(run: run, isReadOnly: true),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Map thumbnail placeholder
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              height: 140,
-              width: double.infinity,
-              color: AppColors.primaryContainer.withOpacity(0.3),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Placeholder route lines
-                  CustomPaint(
-                    size: const Size(double.infinity, 140),
-                    painter: _RoutePainter(),
-                  ),
-                  // Map overlay label
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Last Route',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: Colors.white,
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cardShadow,
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: SizedBox(
+                height: 140,
+                width: double.infinity,
+                child: Stack(
+                  children: [
+                    RoutePreview(points: run.routePoints),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Last Route',
+                          style: AppTextStyles.labelSmall
+                              .copyWith(color: Colors.white),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Title + date
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Last Run Recap', style: AppTextStyles.titleMedium),
-              Text(run.dateLabel, style: AppTextStyles.bodySmall),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Stats row
-          Row(
-            children: [
-              Expanded(
-                child: _StatChip(
-                  value: run.distanceKm.toStringAsFixed(1),
-                  unit: 'KM',
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatChip(value: run.duration, unit: 'TIME'),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatChip(value: run.pace, unit: 'PACE'),
-              ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Last Run Recap', style: AppTextStyles.titleMedium),
+                Text(_dateLabel(), style: AppTextStyles.bodySmall),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatChip(
+                    value: run.distanceFormatted,
+                    unit: 'KM',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatChip(value: run.durationFormatted, unit: 'TIME'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatChip(
+                    value: run.paceFormatted ?? '--',
+                    unit: 'PACE',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -562,78 +462,36 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ─── Route Painter (map placeholder) ─────────────────────────────────────────
+// ─── No runs yet ──────────────────────────────────────────────────────────────
 
-class _RoutePainter extends CustomPainter {
+class _NoRunsYetCard extends StatelessWidget {
+  const _NoRunsYetCard();
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.primary
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final path = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.6)
-      ..cubicTo(
-        size.width * 0.2,
-        size.height * 0.2,
-        size.width * 0.5,
-        size.height * 0.15,
-        size.width * 0.7,
-        size.height * 0.35,
-      )
-      ..cubicTo(
-        size.width * 0.85,
-        size.height * 0.5,
-        size.width * 0.75,
-        size.height * 0.8,
-        size.width * 0.4,
-        size.height * 0.8,
-      )
-      ..cubicTo(
-        size.width * 0.25,
-        size.height * 0.8,
-        size.width * 0.12,
-        size.height * 0.75,
-        size.width * 0.15,
-        size.height * 0.6,
-      );
-
-    // Draw faint fill
-    final fillPaint = Paint()
-      ..color = AppColors.primaryContainer.withOpacity(0.2)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(path, fillPaint);
-    canvas.drawPath(path, paint);
-
-    // Start dot
-    canvas.drawCircle(
-      Offset(size.width * 0.15, size.height * 0.6),
-      6,
-      Paint()..color = AppColors.primary,
-    );
-
-    // End dot
-    canvas.drawCircle(
-      Offset(size.width * 0.7, size.height * 0.35),
-      6,
-      Paint()
-        ..color = AppColors.surfaceContainerLowest
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.7, size.height * 0.35),
-      6,
-      Paint()
-        ..color = AppColors.primary
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.directions_run_rounded,
+            size: 44,
+            color: AppColors.primary.withOpacity(0.6),
+          ),
+          const SizedBox(height: 12),
+          Text('No runs yet', style: AppTextStyles.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Tap START RUN above to record your first one.',
+            style: AppTextStyles.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

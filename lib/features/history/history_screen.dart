@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:near_run/core/theme/app_colors.dart';
-import 'package:near_run/core/theme/app_text_styles.dart';
-import 'package:near_run/features/history/viewmodel/history_viewmodel.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
+import '../../core/models/run_model.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/route_preview.dart';
+import '../run_summary/run_summary_screen.dart';
+import 'viewmodel/history_viewmodel.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -17,8 +20,6 @@ class HistoryScreen extends StatelessWidget {
   }
 }
 
-// ─── Root View ────────────────────────────────────────────────────────────────
-
 class _HistoryView extends StatelessWidget {
   const _HistoryView();
 
@@ -29,29 +30,23 @@ class _HistoryView extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopBar(context),
+            _buildTopBar(),
             Expanded(
               child: Consumer<HistoryViewModel>(
                 builder: (_, vm, __) {
                   if (vm.isLoading) {
                     return const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child:
+                          CircularProgressIndicator(color: AppColors.primary),
                     );
                   }
-                  if (vm.isEmpty) {
-                    return _EmptyState();
-                  }
+                  if (vm.isEmpty) return const _EmptyState();
                   return RefreshIndicator(
                     color: AppColors.primary,
                     onRefresh: vm.refresh,
                     child: CustomScrollView(
                       slivers: [
-                        // ── Big heading ──────────────────────────────────
-                        SliverToBoxAdapter(
-                          child: _HistoryHeading(),
-                        ),
-
-                        // ── Run cards list ────────────────────────────────
+                        const SliverToBoxAdapter(child: _HistoryHeading()),
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                           sliver: SliverList.separated(
@@ -60,7 +55,18 @@ class _HistoryView extends StatelessWidget {
                                 const SizedBox(height: 16),
                             itemBuilder: (ctx, i) => _RunCard(
                               run: vm.runs[i],
-                              onTap: () => vm.onRunTapped(vm.runs[i]),
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => RunSummaryScreen(
+                                      run: vm.runs[i],
+                                      isReadOnly: true,
+                                    ),
+                                  ),
+                                );
+                                // Reload in case the user deleted the run from Summary.
+                                vm.refresh();
+                              },
                             ),
                           ),
                         ),
@@ -76,13 +82,11 @@ class _HistoryView extends StatelessWidget {
     );
   }
 
-  Widget _buildTopBar(BuildContext context) {
+  Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       child: Row(
         children: [
-          const Icon(Icons.menu_rounded, size: 26, color: AppColors.onSurface),
-          const SizedBox(width: 12),
           Text(
             'near_run',
             style: AppTextStyles.brandTitle.copyWith(
@@ -111,9 +115,9 @@ class _HistoryView extends StatelessWidget {
   }
 }
 
-// ─── History Heading ──────────────────────────────────────────────────────────
-
 class _HistoryHeading extends StatelessWidget {
+  const _HistoryHeading();
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -144,12 +148,29 @@ class _HistoryHeading extends StatelessWidget {
   }
 }
 
-// ─── Run Card ─────────────────────────────────────────────────────────────────
-
 class _RunCard extends StatelessWidget {
-  final RunRecord run;
+  final RunModel run;
   final VoidCallback onTap;
   const _RunCard({required this.run, required this.onTap});
+
+  String get _dateLabel {
+    final now = DateTime.now();
+    final runDay = DateTime(run.startTime.year, run.startTime.month, run.startTime.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(runDay).inDays;
+    if (diff == 0) return 'TODAY';
+    if (diff == 1) return 'YESTERDAY';
+    return DateFormat('MMM d, y').format(run.startTime).toUpperCase();
+  }
+
+  String get _title {
+    final h = run.startTime.hour;
+    if (h < 10) return 'Morning Run';
+    if (h < 14) return 'Midday Run';
+    if (h < 18) return 'Afternoon Run';
+    if (h < 22) return 'Evening Run';
+    return 'Night Run';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -175,25 +196,16 @@ class _RunCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Date + achievement badge row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        run.dateLabel,
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.primary,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      if (run.hasAchievement) const _AchievementBadge(),
-                    ],
+                  Text(
+                    _dateLabel,
+                    style: AppTextStyles.labelSmall.copyWith(
+                      color: AppColors.primary,
+                      letterSpacing: 1,
+                    ),
                   ),
                   const SizedBox(height: 6),
-
-                  // Run title
                   Text(
-                    run.title,
+                    _title,
                     style: AppTextStyles.headlineSmall.copyWith(
                       fontWeight: FontWeight.w800,
                       fontSize: 26,
@@ -201,23 +213,40 @@ class _RunCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-
-                  // Stats row
-                  run.duration != null
-                      ? _ThreeStatRow(run: run)
-                      : _TwoStatRow(run: run),
+                  Row(
+                    children: [
+                      _StatItem(
+                        label: 'DIST',
+                        value: run.distanceFormatted,
+                        unit: 'km',
+                        valueColor: AppColors.primary,
+                      ),
+                      const SizedBox(width: 28),
+                      _StatItem(
+                        label: 'TIME',
+                        value: run.durationFormatted,
+                        unit: '',
+                        valueColor: AppColors.onSurface,
+                      ),
+                      const SizedBox(width: 28),
+                      _StatItem(
+                        label: 'PACE',
+                        value: run.paceFormatted ?? '--',
+                        unit: '/km',
+                        valueColor: AppColors.onSurface,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-
-            // Map thumbnail
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(bottom: Radius.circular(24)),
               child: SizedBox(
                 height: 160,
                 width: double.infinity,
-                child: _MapThumbnail(style: run.mapStyle),
+                child: RoutePreview(points: run.routePoints),
               ),
             ),
           ],
@@ -227,86 +256,17 @@ class _RunCard extends StatelessWidget {
   }
 }
 
-// ─── Stat Rows ────────────────────────────────────────────────────────────────
-
-class _TwoStatRow extends StatelessWidget {
-  final RunRecord run;
-  const _TwoStatRow({required this.run});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _StatItem(
-          label: 'DISTANCE',
-          value: run.distanceFormatted,
-          unit: 'km',
-          valueColor: AppColors.primary,
-          valueFontSize: 24,
-        ),
-        const SizedBox(width: 32),
-        _StatItem(
-          label: 'PACE',
-          value: run.pace,
-          unit: '/km',
-          valueColor: AppColors.onSurface,
-          valueFontSize: 22,
-        ),
-      ],
-    );
-  }
-}
-
-class _ThreeStatRow extends StatelessWidget {
-  final RunRecord run;
-  const _ThreeStatRow({required this.run});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _StatItem(
-          label: 'DIST',
-          value: run.distanceKm.toStringAsFixed(1),
-          unit: '',
-          valueColor: AppColors.onSurface,
-          valueFontSize: 22,
-        ),
-        const SizedBox(width: 24),
-        _StatItem(
-          label: 'TIME',
-          value: run.duration!,
-          unit: '',
-          valueColor: AppColors.onSurface,
-          valueFontSize: 22,
-        ),
-        const SizedBox(width: 24),
-        if (run.heartRateBpm != null)
-          _StatItem(
-            label: 'BPM',
-            value: '${run.heartRateBpm}',
-            unit: '',
-            valueColor: AppColors.onSurface,
-            valueFontSize: 22,
-          ),
-      ],
-    );
-  }
-}
-
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
   final String unit;
   final Color valueColor;
-  final double valueFontSize;
 
   const _StatItem({
     required this.label,
     required this.value,
     required this.unit,
     required this.valueColor,
-    required this.valueFontSize,
   });
 
   @override
@@ -323,7 +283,7 @@ class _StatItem extends StatelessWidget {
             Text(
               value,
               style: AppTextStyles.headlineSmall.copyWith(
-                fontSize: valueFontSize,
+                fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: valueColor,
                 letterSpacing: -0.5,
@@ -340,182 +300,9 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-// ─── Achievement Badge ────────────────────────────────────────────────────────
-
-class _AchievementBadge extends StatelessWidget {
-  const _AchievementBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-      ),
-      child: Text(
-        'ACHIEVEMENT',
-        style: AppTextStyles.labelSmall.copyWith(
-          color: AppColors.primary,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Map Thumbnail ────────────────────────────────────────────────────────────
-
-class _MapThumbnail extends StatelessWidget {
-  final RunMapStyle style;
-  const _MapThumbnail({required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _MapThumbnailPainter(style: style),
-      child: const SizedBox.expand(),
-    );
-  }
-}
-
-class _MapThumbnailPainter extends CustomPainter {
-  final RunMapStyle style;
-  const _MapThumbnailPainter({required this.style});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    switch (style) {
-      case RunMapStyle.dark:
-        _paintDark(canvas, size);
-      case RunMapStyle.light:
-        _paintLight(canvas, size);
-      case RunMapStyle.terrain:
-        _paintTerrain(canvas, size);
-    }
-  }
-
-  void _paintDark(Canvas canvas, Size size) {
-    // Dark city map
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = const Color(0xFF0D1B2A),
-    );
-
-    // City grid lines
-    final gridPaint = Paint()
-      ..color = const Color(0xFF1A2E42)
-      ..strokeWidth = 1;
-    for (double x = 0; x < size.width; x += 30) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += 30) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // Route
-    _drawRoute(canvas, size, AppColors.primaryContainer, width: 5);
-  }
-
-  void _paintLight(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = AppColors.primaryContainer.withOpacity(0.25),
-    );
-
-    // Wavy river / path
-    final path = Path()
-      ..moveTo(0, size.height * 0.5)
-      ..cubicTo(
-        size.width * 0.25, size.height * 0.3,
-        size.width * 0.5, size.height * 0.7,
-        size.width * 0.75, size.height * 0.4,
-      )
-      ..cubicTo(
-        size.width * 0.88, size.height * 0.3,
-        size.width, size.height * 0.45,
-        size.width, size.height * 0.45,
-      );
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white.withOpacity(0.5)
-        ..strokeWidth = 24
-        ..style = PaintingStyle.stroke,
-    );
-
-    _drawRoute(canvas, size, AppColors.primary, width: 4);
-  }
-
-  void _paintTerrain(Canvas canvas, Size size) {
-    // Dark terrain with contour lines
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = const Color(0xFF0A2A1F),
-    );
-
-    final contourPaint = Paint()
-      ..color = const Color(0xFF1A4D38)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    // Contour rings
-    for (int i = 1; i <= 5; i++) {
-      final ovalRect = Rect.fromCenter(
-        center: Offset(size.width * 0.4, size.height * 0.55),
-        width: size.width * 0.25 * i,
-        height: size.height * 0.18 * i,
-      );
-      canvas.drawOval(ovalRect, contourPaint);
-    }
-
-    // Neon green route accent
-    _drawRoute(canvas, size, const Color(0xFF00FF88), width: 4);
-  }
-
-  void _drawRoute(Canvas canvas, Size size, Color color, {double width = 4}) {
-    final path = Path()
-      ..moveTo(size.width * 0.1, size.height * 0.7)
-      ..cubicTo(
-        size.width * 0.3, size.height * 0.2,
-        size.width * 0.6, size.height * 0.3,
-        size.width * 0.85, size.height * 0.55,
-      );
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color.withOpacity(0.85)
-        ..strokeWidth = width
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // Start dot
-    canvas.drawCircle(
-      Offset(size.width * 0.1, size.height * 0.7),
-      5,
-      Paint()..color = color,
-    );
-
-    // End dot
-    canvas.drawCircle(
-      Offset(size.width * 0.85, size.height * 0.55),
-      5,
-      Paint()..color = color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
 class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
   @override
   Widget build(BuildContext context) {
     return Center(

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'core/widgets/app_bottom_nav.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/app_bottom_nav.dart';
 import 'features/history/history_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/profile/profile_screen.dart';
-import 'features/run_summary/run_summary_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,10 +33,10 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
 
-  static const _screens = [
+  // Keep each tab's state alive so switching back doesn't reload from DB.
+  final _screens = const [
     HomeScreen(),
     HistoryScreen(),
-    RunSummaryScreen(),
     ProfileScreen(),
   ];
 
