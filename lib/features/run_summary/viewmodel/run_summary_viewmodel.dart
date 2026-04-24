@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show BuildContext, Navigator;
 import '../../../core/models/run_model.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/user_preferences_service.dart';
 
 class RunSummaryViewModel extends ChangeNotifier {
   final DatabaseService _db = DatabaseService.instance;
+  final UserPreferencesService _prefs = UserPreferencesService.instance;
 
   RunModel _run;
   RunModel get run => _run;
@@ -31,12 +33,9 @@ class RunSummaryViewModel extends ChangeNotifier {
     return 'Night Run';
   }
 
-  /// Rough calorie estimate — without a real user weight we approximate at
-  /// 70kg and ~1 kcal/kg/km, which lands within ~15% of most trackers.
-  int get estimatedCalories {
-    const kgAssumed = 70;
-    return (_run.distanceKm * kgAssumed).round();
-  }
+  /// Rough calorie estimate — ~1 kcal/kg/km, which lands within ~15% of
+  /// most trackers. Uses the weight set during onboarding.
+  int get estimatedCalories => (_run.distanceKm * _prefs.weightKg).round();
 
   Future<void> saveRun(BuildContext context) async {
     if (_isSaving || isReadOnly) return;

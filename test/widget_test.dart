@@ -2,15 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:near_run/main.dart';
 
 void main() {
-  testWidgets('App boots to home', (WidgetTester tester) async {
+  testWidgets('App boots to splash', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
-    // Brand shows on the home app bar.
+    // Splash renders the brand and tagline.
     expect(find.text('NearRun'), findsOneWidget);
-    // Bottom nav renders all three tabs.
-    expect(find.text('HOME'), findsOneWidget);
-    expect(find.text('HISTORY'), findsOneWidget);
-    expect(find.text('PROFILE'), findsOneWidget);
+    expect(find.text('Run anywhere. No signal needed.'), findsOneWidget);
   });
 }

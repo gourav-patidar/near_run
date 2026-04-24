@@ -4,8 +4,10 @@ import 'core/widgets/app_bottom_nav.dart';
 import 'features/history/history_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/profile/profile_screen.dart';
+import 'features/splash/splash_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -18,7 +20,7 @@ class MyApp extends StatelessWidget {
       title: 'NearRun',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const AppShell(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -33,7 +35,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
 
-  // Keep each tab's state alive so switching back doesn't reload from DB.
   final _screens = const [
     HomeScreen(),
     HistoryScreen(),

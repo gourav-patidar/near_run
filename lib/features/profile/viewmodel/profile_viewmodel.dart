@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/run_model.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/user_preferences_service.dart';
 
 // ─── Badge Model ──────────────────────────────────────────────────────────────
 
@@ -42,11 +43,13 @@ const _dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 class ProfileViewModel extends ChangeNotifier {
   final DatabaseService _db = DatabaseService.instance;
+  final UserPreferencesService _prefs = UserPreferencesService.instance;
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  final String name = 'Runner';
+  String get name => _prefs.name;
+
   String get subtitle {
     final dist = _stats.totalDistanceKm;
     final tier = dist >= 500
@@ -90,6 +93,7 @@ class ProfileViewModel extends ChangeNotifier {
   double _dailyGoalPercent = 0;
   double get dailyGoalPercent => _dailyGoalPercent;
   String get dailyGoalLabel => '${(_dailyGoalPercent * 100).round()}%';
+  double get dailyGoalTargetKm => _prefs.dailyGoalKm;
 
   ProfileViewModel() {
     _load();
@@ -182,7 +186,9 @@ class ProfileViewModel extends ChangeNotifier {
   double _computeDailyGoal(List<DailyDistance> daily) {
     if (daily.isEmpty) return 0;
     final todayKm = daily.last.distanceKm;
-    return (todayKm / 5.0).clamp(0.0, 1.0);
+    final target = _prefs.dailyGoalKm;
+    if (target <= 0) return 0;
+    return (todayKm / target).clamp(0.0, 1.0);
   }
 
   List<BadgeModel> _deriveBadges(RunStats stats, int streak) {

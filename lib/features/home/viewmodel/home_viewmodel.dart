@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/run_model.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/user_preferences_service.dart';
 
 // ─── Lightweight tip model (rotated locally, no network) ──────────────────────
 
@@ -42,12 +43,12 @@ const _tips = [
 
 class HomeViewModel extends ChangeNotifier {
   final DatabaseService _db = DatabaseService.instance;
+  final UserPreferencesService _prefs = UserPreferencesService.instance;
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  final String _userName = 'Runner';
-  String get userName => _userName;
+  String get userName => _prefs.name;
 
   RunModel? _lastRun;
   RunModel? get lastRun => _lastRun;
@@ -84,9 +85,9 @@ class HomeViewModel extends ChangeNotifier {
 
   String get greeting {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning, $_userName!';
-    if (hour < 17) return 'Good afternoon, $_userName!';
-    return 'Good evening, $_userName!';
+    if (hour < 12) return 'Good morning, ${_prefs.name}!';
+    if (hour < 17) return 'Good afternoon, ${_prefs.name}!';
+    return 'Good evening, ${_prefs.name}!';
   }
 
   String get greetingSubtitle {
