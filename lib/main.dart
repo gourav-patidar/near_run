@@ -1,5 +1,10 @@
-// main.dart
 import 'package:flutter/material.dart';
+import 'core/theme/app_theme.dart';
+import 'core/widgets/app_bottom_nav.dart';
+import 'features/history/history_screen.dart';
+import 'features/home/home_screen.dart';
+import 'features/profile/profile_screen.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -12,31 +17,38 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'NearRun',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0A0E21),
-        primaryColor: const Color(0xFF4C6EF5),
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFF4C6EF5),
-          secondary: const Color(0xFF7C3AED),
-          surface: const Color(0xFF1A1F3A),
-        ),
-        fontFamily: 'SF Pro Display',
-        textTheme: const TextTheme(
-          headlineLarge: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-          headlineMedium: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-          bodyLarge: TextStyle(fontSize: 16, color: Colors.white70),
-        ),
-      ),
+      theme: AppTheme.light,
+      home: const AppShell(),
     );
   }
 }
 
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _currentIndex = 0;
+
+  // Keep each tab's state alive so switching back doesn't reload from DB.
+  final _screens = const [
+    HomeScreen(),
+    HistoryScreen(),
+    ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      extendBody: true,
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+      ),
+    );
+  }
+}
