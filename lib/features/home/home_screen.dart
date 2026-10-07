@@ -1,10 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/run_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_top_bar.dart';
 import '../../core/widgets/route_preview.dart';
 import '../active_run/active_run_screen.dart';
 import '../run_summary/run_summary_screen.dart';
@@ -29,103 +31,65 @@ class _HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBody: true,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(context),
-      body: Consumer<HomeViewModel>(
-        builder: (context, vm, _) {
-          if (vm.isLoading) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
-          return RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: vm.refresh,
-            child: ListView(
-              padding: const EdgeInsets.only(
-                top: 100,
-                left: 20,
-                right: 20,
-                bottom: 120,
-              ),
+      appBar: const AppTopBar(),
+      body: SafeArea(
+        top: false,
+        child: Consumer<HomeViewModel>(
+          builder: (context, vm, _) {
+            if (vm.isLoading) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
+            return Column(
               children: [
-                _GreetingSection(vm: vm),
-                const SizedBox(height: 32),
-                _StartRunButton(
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ActiveRunScreen(),
-                      ),
-                    );
-                    // Reload last-run card when we come back.
-                    vm.refresh();
-                  },
-                ),
-                const SizedBox(height: 36),
-                if (vm.quickTip != null) ...[
-                  _QuickTipCard(tip: vm.quickTip!),
-                  const SizedBox(height: 16),
-                ],
-                if (vm.lastRun != null)
-                  _LastRunCard(run: vm.lastRun!)
-                else
-                  const _NoRunsYetCard(),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(68),
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            height: 68 + MediaQuery.of(context).padding.top,
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top,
-              left: 20,
-              right: 20,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
-              border: Border(
-                bottom: BorderSide(
-                  color: AppColors.outlineVariant.withOpacity(0.3),
-                  width: 0.5,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
+                // Fixed, Non-Scrollable Hero Section
                 Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primaryContainer,
-                    border: Border.all(
-                      color: AppColors.primary.withOpacity(0.2),
-                      width: 1.5,
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  color: AppColors.background,
+                  child: Column(
+                    children: [
+                      _GreetingSection(vm: vm),
+                      const SizedBox(height: 16),
+                      _StartRunButton(
+                        onTap: () async {
+                          HapticFeedback.mediumImpact();
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ActiveRunScreen(),
+                            ),
+                          );
+                          vm.refresh();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Scrollable Cards Below
+                Expanded(
+                  child: RefreshIndicator(
+                    color: AppColors.primary,
+                    onRefresh: vm.refresh,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                      children: [
+                        if (vm.quickTip != null) ...[
+                          _QuickTipCard(tip: vm.quickTip!),
+                          const SizedBox(height: 16),
+                        ],
+                        if (vm.lastRun != null)
+                          _LastRunCard(run: vm.lastRun!)
+                        else
+                          const _NoRunsYetCard(),
+                      ],
                     ),
                   ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: AppColors.primary,
-                    size: 22,
-                  ),
                 ),
-                const SizedBox(width: 12),
-                Text('NearRun', style: AppTextStyles.brandTitle),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -141,17 +105,32 @@ class _GreetingSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(vm.greeting, style: AppTextStyles.headlineLarge),
-        const SizedBox(height: 6),
-        Text(vm.greetingSubtitle, style: AppTextStyles.greetingSubtitle),
+        Text(
+          vm.greeting,
+          style: AppTextStyles.headlineMedium.copyWith(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.onSurface,
+            letterSpacing: -0.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          vm.greetingSubtitle,
+          style: AppTextStyles.bodyMedium.copyWith(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
 }
 
-// ─── Start Run button ─────────────────────────────────────────────────────────
+// ─── Start Run button (Clean Fixed Size 130px) ───────────────────────────────
 
 class _StartRunButton extends StatefulWidget {
   final VoidCallback onTap;
@@ -175,11 +154,11 @@ class _StartRunButtonState extends State<_StartRunButton>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _scaleAnim = Tween<double>(begin: 0.95, end: 1.0).animate(
+    _scaleAnim = Tween<double>(begin: 0.96, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    _glowAnim = Tween<double>(begin: 0.2, end: 0.45).animate(
+    _glowAnim = Tween<double>(begin: 0.15, end: 0.35).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
@@ -201,36 +180,39 @@ class _StartRunButtonState extends State<_StartRunButton>
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Outer Glow Ring
                 Container(
-                  width: 220,
-                  height: 220,
+                  width: 150,
+                  height: 150,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(_glowAnim.value),
-                        blurRadius: 60,
-                        spreadRadius: 10,
+                        color: AppColors.primary.withValues(alpha: _glowAnim.value),
+                        blurRadius: 36,
+                        spreadRadius: 6,
                       ),
                     ],
                   ),
                 ),
+                // Border Ring
                 Container(
-                  width: 200,
-                  height: 200,
+                  width: 140,
+                  height: 140,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: AppColors.primaryContainer.withOpacity(0.6),
-                      width: 2,
+                      color: AppColors.primaryContainer.withValues(alpha: 0.8),
+                      width: 1.5,
                     ),
                   ),
                 ),
+                // Core Button
                 Transform.scale(
                   scale: _scaleAnim.value,
                   child: Container(
-                    width: 180,
-                    height: 180,
+                    width: 126,
+                    height: 126,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
@@ -240,9 +222,9 @@ class _StartRunButtonState extends State<_StartRunButton>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
-                          blurRadius: 30,
-                          offset: const Offset(0, 12),
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -252,10 +234,16 @@ class _StartRunButtonState extends State<_StartRunButton>
                         const Icon(
                           Icons.play_arrow_rounded,
                           color: AppColors.onPrimary,
-                          size: 64,
+                          size: 42,
                         ),
-                        const SizedBox(height: 4),
-                        Text('START RUN', style: AppTextStyles.startRunLabel),
+                        const SizedBox(height: 2),
+                        Text(
+                          'START RUN',
+                          style: AppTextStyles.startRunLabel.copyWith(
+                            fontSize: 11,
+                            letterSpacing: 1.8,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -278,20 +266,20 @@ class _QuickTipCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.65),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 1),
+            color: Colors.white.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
             boxShadow: [
               BoxShadow(
                 color: AppColors.cardShadow,
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -302,25 +290,31 @@ class _QuickTipCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: AppColors.secondaryContainer,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
                       Icons.lightbulb_outline_rounded,
                       color: AppColors.onSecondaryContainer,
-                      size: 22,
+                      size: 18,
                     ),
                   ),
                   Text('QUICK TIP', style: AppTextStyles.chipLabel),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(tip.title, style: AppTextStyles.titleMedium),
-              const SizedBox(height: 6),
-              Text(tip.body, style: AppTextStyles.bodyMedium),
+              const SizedBox(height: 12),
+              Text(
+                tip.title,
+                style: AppTextStyles.titleMedium.copyWith(fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                tip.body,
+                style: AppTextStyles.bodyMedium.copyWith(fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -356,44 +350,46 @@ class _LastRunCard extends StatelessWidget {
         );
       },
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
               color: AppColors.cardShadow,
-              blurRadius: 24,
-              offset: const Offset(0, 8),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               child: SizedBox(
-                height: 140,
+                height: 120,
                 width: double.infinity,
                 child: Stack(
                   children: [
                     RoutePreview(points: run.routePoints),
                     Positioned(
-                      top: 10,
-                      left: 10,
+                      top: 8,
+                      left: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                          horizontal: 8,
+                          vertical: 3,
                         ),
                         decoration: BoxDecoration(
                           color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Last Route',
-                          style: AppTextStyles.labelSmall
-                              .copyWith(color: Colors.white),
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -401,15 +397,18 @@ class _LastRunCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Last Run Recap', style: AppTextStyles.titleMedium),
+                Text(
+                  'Last Run Recap',
+                  style: AppTextStyles.titleMedium.copyWith(fontSize: 16),
+                ),
                 Text(_dateLabel(), style: AppTextStyles.bodySmall),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -418,11 +417,11 @@ class _LastRunCard extends StatelessWidget {
                     unit: 'KM',
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _StatChip(value: run.durationFormatted, unit: 'TIME'),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _StatChip(
                     value: run.paceFormatted ?? '--',
@@ -446,14 +445,17 @@ class _StatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
-          Text(value, style: AppTextStyles.statValue),
+          Text(
+            value,
+            style: AppTextStyles.statValue.copyWith(fontSize: 18),
+          ),
           const SizedBox(height: 2),
           Text(unit, style: AppTextStyles.statUnit),
         ],
@@ -470,21 +472,24 @@ class _NoRunsYetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         children: [
           Icon(
             Icons.directions_run_rounded,
-            size: 44,
-            color: AppColors.primary.withOpacity(0.6),
+            size: 36,
+            color: AppColors.primary.withValues(alpha: 0.6),
           ),
-          const SizedBox(height: 12),
-          Text('No runs yet', style: AppTextStyles.titleMedium),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
+          Text(
+            'No runs yet',
+            style: AppTextStyles.titleMedium.copyWith(fontSize: 16),
+          ),
+          const SizedBox(height: 2),
           Text(
             'Tap START RUN above to record your first one.',
             style: AppTextStyles.bodySmall,

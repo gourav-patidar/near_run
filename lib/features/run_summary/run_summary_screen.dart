@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/run_model.dart';
@@ -41,7 +42,7 @@ class _RunSummaryView extends StatelessWidget {
           builder: (ctx, vm, __) => ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
-              const _TopBar(),
+              _TopBar(run: vm.run, runName: vm.runName),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -115,7 +116,9 @@ class _RunSummaryView extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  final RunModel run;
+  final String runName;
+  const _TopBar({required this.run, required this.runName});
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +140,22 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text('Run Summary', style: AppTextStyles.titleLarge),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.share_outlined, color: AppColors.primary),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              final summaryText =
+                  '🏃‍♂️ $runName\n📍 Distance: ${run.distanceFormatted} km\n⏱️ Duration: ${run.durationFormatted}\n⚡ Pace: ${run.paceFormatted ?? "--"}/km\nRecorded with NearRun';
+              Clipboard.setData(ClipboardData(text: summaryText));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Run summary copied to clipboard!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -144,15 +163,15 @@ class _TopBar extends StatelessWidget {
 }
 
 class _MapRecapCard extends StatelessWidget {
-  final List<dynamic> points; // List<LatLng> but typed loosely to avoid import
+  final List<dynamic> points;
   const _MapRecapCard({required this.points});
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(24),
       child: SizedBox(
-        height: 200,
+        height: 180,
         width: double.infinity,
         child: RoutePreview(
           points: points.cast(),
@@ -177,9 +196,9 @@ class _RecapHeader extends StatelessWidget {
           vm.isReadOnly ? 'RUN DETAILS' : 'SESSION COMPLETE',
           style: AppTextStyles.chipLabel,
         ),
-        const SizedBox(height: 8),
-        Text(vm.runName, style: AppTextStyles.headlineMedium),
         const SizedBox(height: 6),
+        Text(vm.runName, style: AppTextStyles.headlineMedium.copyWith(fontSize: 22)),
+        const SizedBox(height: 4),
         Text(
           DateFormat('EEE, MMM d • h:mm a').format(vm.run.startTime),
           style: AppTextStyles.bodyMedium,
@@ -204,21 +223,22 @@ class _BigStatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.35)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: AppTextStyles.chipLabel),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           RichText(
             text: TextSpan(
               text: value,
               style: AppTextStyles.displaySmall.copyWith(
+                fontSize: 32,
                 color: AppColors.primary,
               ),
               children: [
@@ -247,21 +267,22 @@ class _MiniStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.35)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: AppTextStyles.chipLabel),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           RichText(
             text: TextSpan(
               text: value,
               style: AppTextStyles.headlineSmall.copyWith(
+                fontSize: 22,
                 color: AppColors.primary,
               ),
               children: [
@@ -286,7 +307,10 @@ class _ActionButtons extends StatelessWidget {
         children: [
           _PrimaryActionButton(
             label: 'Close',
-            onTap: () => Navigator.of(context).maybePop(false),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).maybePop(false);
+            },
           ),
           const SizedBox(height: 12),
           _SecondaryActionButton(
@@ -299,12 +323,17 @@ class _ActionButtons extends StatelessWidget {
     return Column(
       children: [
         _PrimaryActionButton(
-          label: vm.isSaving ? 'Saving...' : 'Save Run',
-          onTap: vm.isSaving ? null : () => vm.saveRun(context),
+          label: vm.isSaving ? 'Saving to History...' : 'Done (Saved)',
+          onTap: vm.isSaving
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  vm.saveRun(context);
+                },
         ),
         const SizedBox(height: 12),
         _SecondaryActionButton(
-          label: 'Discard',
+          label: 'Delete Run',
           onTap: vm.isSaving ? null : () => _confirmDiscard(context, vm),
         ),
       ],
@@ -331,6 +360,7 @@ class _ActionButtons extends StatelessWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
+      HapticFeedback.heavyImpact();
       await vm.deleteRun(context);
     }
   }
@@ -357,6 +387,7 @@ class _ActionButtons extends StatelessWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
+      HapticFeedback.mediumImpact();
       vm.discardRun(context);
     }
   }
@@ -378,9 +409,9 @@ class _PrimaryActionButton extends StatelessWidget {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(20),
           ),
         ),
         child: Text(label, style: AppTextStyles.labelLarge),
@@ -403,10 +434,10 @@ class _SecondaryActionButton extends StatelessWidget {
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.onSurface,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          side: BorderSide(color: AppColors.outlineVariant.withOpacity(0.45)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          side: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.45)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(20),
           ),
         ),
         child: Text(label, style: AppTextStyles.labelLarge),

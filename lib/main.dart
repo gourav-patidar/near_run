@@ -18,6 +18,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'NearRun',
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: mediaQuery.textScaler
+                .clamp(minScaleFactor: 0.85, maxScaleFactor: 0.95),
+          ),
+          child: child!,
+        );
+      },
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const SplashScreen(),
@@ -33,7 +43,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  int _currentIndex = 0;
+  final ValueNotifier<int> _currentIndex = ValueNotifier<int>(0);
 
   final _screens = const [
     HomeScreen(),
@@ -42,13 +52,32 @@ class _AppShellState extends State<AppShell> {
   ];
 
   @override
+  void dispose() {
+    _currentIndex.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
-      extendBody: true,
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+      body: ValueListenableBuilder<int>(
+        valueListenable: _currentIndex,
+        builder: (context, index, _) {
+          return Stack(
+            children: [
+              IndexedStack(index: index, children: _screens),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: AppBottomNav(
+                  currentIndex: index,
+                  onTap: (newIndex) => _currentIndex.value = newIndex,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

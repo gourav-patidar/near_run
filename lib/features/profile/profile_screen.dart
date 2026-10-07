@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
+import 'package:near_run/core/widgets/app_top_bar.dart';
 import 'package:near_run/features/profile/viewmodel/profile_viewmodel.dart';
 import 'package:provider/provider.dart';
 
@@ -26,7 +27,9 @@ class _ProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: const AppTopBar(),
       body: SafeArea(
+        top: false,
         child: Consumer<ProfileViewModel>(
           builder: (_, vm, __) {
             if (vm.isLoading) {
@@ -38,64 +41,20 @@ class _ProfileView extends StatelessWidget {
               color: AppColors.primary,
               onRefresh: vm.refresh,
               child: ListView(
-                padding: const EdgeInsets.only(bottom: 32),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
                 children: [
-                  _TopBar(),
-                  const SizedBox(height: 24),
                   _AvatarSection(vm: vm),
-                  const SizedBox(height: 28),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        _StatsAndChartCard(vm: vm),
-                        const SizedBox(height: 28),
-                        _BadgesSection(vm: vm),
-                        const SizedBox(height: 20),
-                        _BottomCardsRow(vm: vm),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 24),
+                  _StatsAndChartCard(vm: vm),
+                  const SizedBox(height: 20),
+                  _BadgesSection(vm: vm),
+                  const SizedBox(height: 16),
+                  _BottomCardsRow(vm: vm),
                 ],
               ),
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-// ─── Top Bar ──────────────────────────────────────────────────────────────────
-
-class _TopBar extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: Row(
-        children: [
-          const Icon(Icons.menu_rounded, size: 26, color: AppColors.onSurface),
-          const SizedBox(width: 12),
-          Text(
-            'near_run',
-            style: AppTextStyles.brandTitle.copyWith(
-              fontStyle: FontStyle.italic,
-              letterSpacing: -0.8,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.inverseSurface,
-              border: Border.all(color: AppColors.primary, width: 2),
-            ),
-            child: const Icon(Icons.person_rounded, color: Colors.white, size: 20),
-          ),
-        ],
       ),
     );
   }
@@ -111,14 +70,12 @@ class _AvatarSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Avatar with gradient ring
         Stack(
           alignment: Alignment.center,
           children: [
-            // Gradient ring
             Container(
-              width: 120,
-              height: 120,
+              width: 90,
+              height: 90,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: SweepGradient(
@@ -132,41 +89,37 @@ class _AvatarSection extends StatelessWidget {
                 ),
               ),
             ),
-            // Avatar bg
             Container(
-              width: 112,
-              height: 112,
+              width: 84,
+              height: 84,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: Color(0xFF1A2A3A),
               ),
               child: const Icon(
                 Icons.person_rounded,
-                size: 64,
+                size: 48,
                 color: Color(0xFF90CAF9),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-
-        // Name
+        const SizedBox(height: 12),
         Text(
           vm.name,
           style: AppTextStyles.headlineMedium.copyWith(
-            fontWeight: FontWeight.w900,
-            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            fontSize: 22,
             color: AppColors.onSurface,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 4),
-
-        // Tier + level
+        const SizedBox(height: 2),
         Text(
           vm.subtitle,
           style: AppTextStyles.labelSmall.copyWith(
-            letterSpacing: 1.2,
+            fontSize: 10,
+            letterSpacing: 1,
             color: AppColors.onSurfaceVariant,
           ),
         ),
@@ -184,22 +137,21 @@ class _StatsAndChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: AppColors.cardShadow,
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Total distance + total runs
           Row(
             children: [
               Expanded(
@@ -218,35 +170,31 @@ class _StatsAndChartCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // Weekly intensity header
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Weekly Intensity',
                 style: AppTextStyles.titleMedium.copyWith(
+                  fontSize: 15,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(99),
                 ),
                 child: Text(
                   'LAST 7 DAYS',
-                  style: AppTextStyles.labelSmall,
+                  style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Bar chart
+          const SizedBox(height: 14),
           _WeeklyBarChart(bars: vm.weeklyBars),
         ],
       ),
@@ -266,8 +214,8 @@ class _StatLabel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.chipLabel),
-        const SizedBox(height: 4),
+        Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
+        const SizedBox(height: 2),
         Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
@@ -275,16 +223,17 @@ class _StatLabel extends StatelessWidget {
             Text(
               value,
               style: AppTextStyles.displaySmall.copyWith(
-                fontSize: 48,
+                fontSize: 36,
                 fontWeight: FontWeight.w900,
                 color: AppColors.onSurface,
-                letterSpacing: -2,
+                letterSpacing: -1.5,
               ),
             ),
             const SizedBox(width: 4),
             Text(
               unit,
               style: AppTextStyles.titleMedium.copyWith(
+                fontSize: 14,
                 color: AppColors.primary,
                 fontStyle: FontStyle.italic,
                 fontWeight: FontWeight.w700,
@@ -306,7 +255,7 @@ class _WeeklyBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 140,
+      height: 120,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -331,39 +280,38 @@ class _Bar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const maxHeight = 100.0;
-    final height = math.max(maxHeight * bar.intensity, 10.0);
+    const maxHeight = 85.0;
+    final height = math.max(maxHeight * bar.intensity, 8.0);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Container(
-          width: 30,
+          width: 26,
           height: height,
           decoration: BoxDecoration(
             color: bar.intensity < 0.2
                 ? AppColors.surfaceContainerHighest
                 : barColor,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: bar.isToday
                 ? [
                     BoxShadow(
-                      color: barColor.withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                      color: barColor.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     )
                   ]
                 : null,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           bar.dayLabel,
           style: AppTextStyles.labelSmall.copyWith(
-            fontWeight:
-                bar.isToday ? FontWeight.w800 : FontWeight.w500,
-            color:
-                bar.isToday ? AppColors.onSurface : AppColors.onSurfaceVariant,
+            fontSize: 10,
+            fontWeight: bar.isToday ? FontWeight.w800 : FontWeight.w500,
+            color: bar.isToday ? AppColors.onSurface : AppColors.onSurfaceVariant,
           ),
         ),
       ],
@@ -386,20 +334,22 @@ class _BadgesSection extends StatelessWidget {
           children: [
             Text(
               'Earned Badges',
-              style: AppTextStyles.titleLarge.copyWith(
+              style: AppTextStyles.titleMedium.copyWith(
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
             ),
             if (vm.streakDays > 0)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryContainer.withOpacity(0.4),
+                  color: AppColors.primaryContainer.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(99),
                 ),
                 child: Text(
                   '${vm.streakDays} DAY STREAK',
                   style: AppTextStyles.labelMedium.copyWith(
+                    fontSize: 10,
                     color: AppColors.primary,
                     letterSpacing: 0.8,
                   ),
@@ -407,20 +357,20 @@ class _BadgesSection extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (vm.badges.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             decoration: BoxDecoration(
               color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               children: [
                 Icon(Icons.emoji_events_outlined,
-                    size: 32, color: AppColors.onSurfaceVariant),
-                const SizedBox(height: 8),
+                    size: 28, color: AppColors.onSurfaceVariant),
+                const SizedBox(height: 6),
                 Text(
                   'Record your first run to unlock badges.',
                   style: AppTextStyles.bodySmall,
@@ -434,7 +384,7 @@ class _BadgesSection extends StatelessWidget {
             children: vm.badges
                 .map((b) => Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.only(right: 10),
                         child: _BadgeChip(badge: b),
                       ),
                     ))
@@ -489,22 +439,23 @@ class _BadgeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          Icon(icon, color: iconColor, size: 30),
-          const SizedBox(height: 10),
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(height: 6),
           Text(
             badge.title,
             textAlign: TextAlign.center,
             style: AppTextStyles.labelSmall.copyWith(
+              fontSize: 10,
               color: AppColors.onSurface,
-              letterSpacing: 0.8,
-              height: 1.4,
+              letterSpacing: 0.5,
+              height: 1.3,
             ),
           ),
         ],
@@ -523,91 +474,91 @@ class _BottomCardsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Daily Goal — green card
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: AppColors.primary,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.local_fire_department_rounded,
-                    color: Colors.white70, size: 28),
-                const SizedBox(height: 10),
+                    color: Colors.white70, size: 24),
+                const SizedBox(height: 8),
                 Text(
                   'DAILY GOAL',
                   style: AppTextStyles.chipLabel.copyWith(
+                    fontSize: 10,
                     color: Colors.white70,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   vm.dailyGoalLabel,
                   style: AppTextStyles.displaySmall.copyWith(
-                    fontSize: 40,
+                    fontSize: 32,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: vm.dailyGoalPercent,
-                    minHeight: 8,
-                    backgroundColor: Colors.white.withOpacity(0.25),
-                    valueColor:
-                        const AlwaysStoppedAnimation(Colors.white),
+                    minHeight: 6,
+                    backgroundColor: Colors.white.withValues(alpha: 0.25),
+                    valueColor: const AlwaysStoppedAnimation(Colors.white),
                   ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
 
-        // Avg BPM — pink card
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: const Color(0xFFFFF0EC),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.favorite_rounded,
-                    color: Color(0xFFE53935), size: 28),
-                const SizedBox(height: 10),
+                    color: Color(0xFFE53935), size: 24),
+                const SizedBox(height: 8),
                 Text(
                   'AVG BPM',
                   style: AppTextStyles.chipLabel.copyWith(
+                    fontSize: 10,
                     color: AppColors.onSurfaceVariant,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   '${vm.avgBpm}',
                   style: AppTextStyles.displaySmall.copyWith(
-                    fontSize: 40,
+                    fontSize: 32,
                     fontWeight: FontWeight.w900,
                     color: const Color(0xFFE53935),
                     letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   vm.bpmZoneLabel,
                   style: AppTextStyles.chipLabel.copyWith(
+                    fontSize: 9,
                     color: AppColors.onSurfaceVariant,
-                    letterSpacing: 1,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ],

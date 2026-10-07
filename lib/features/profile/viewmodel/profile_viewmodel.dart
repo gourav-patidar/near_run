@@ -88,8 +88,6 @@ class ProfileViewModel extends ChangeNotifier {
     return 'ZONE 5 MAX';
   }
 
-  /// Target: 5km/day as a nice round goal. Percentage of today's distance
-  /// toward it, capped at 100%.
   double _dailyGoalPercent = 0;
   double get dailyGoalPercent => _dailyGoalPercent;
   String get dailyGoalLabel => '${(_dailyGoalPercent * 100).round()}%';
@@ -97,12 +95,10 @@ class ProfileViewModel extends ChangeNotifier {
 
   ProfileViewModel() {
     _load();
+    _db.addListener(_load);
   }
 
   Future<void> _load() async {
-    _isLoading = true;
-    notifyListeners();
-
     try {
       final results = await Future.wait([
         _db.getStats(),
@@ -130,13 +126,16 @@ class ProfileViewModel extends ChangeNotifier {
 
   Future<void> refresh() => _load();
 
+  @override
+  void dispose() {
+    _db.removeListener(_load);
+    super.dispose();
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   List<WeeklyBarModel> _buildWeeklyBars(List<DailyDistance> daily) {
-    // `daily` is oldest → newest for the last 7 days. Normalize to the
-    // week's max run so the tallest bar fills the chart.
     if (daily.length != 7) {
-      // Fall back to empty week.
       final todayIdx = (DateTime.now().weekday - 1).clamp(0, 6);
       return List.generate(
         7,

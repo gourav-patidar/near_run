@@ -58,12 +58,10 @@ class HomeViewModel extends ChangeNotifier {
 
   HomeViewModel() {
     _load();
+    _db.addListener(_load);
   }
 
   Future<void> _load() async {
-    _isLoading = true;
-    notifyListeners();
-
     try {
       final recent = await _db.getRecentRuns(1);
       _lastRun = recent.isNotEmpty ? recent.first : null;
@@ -72,8 +70,6 @@ class HomeViewModel extends ChangeNotifier {
       _lastRun = null;
     }
 
-    // Rotate tip deterministically by day of year so it feels fresh
-    // without being random across rebuilds.
     final dayOfYear = int.parse(
       DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays.toString(),
     );
@@ -103,4 +99,10 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<void> refresh() => _load();
+
+  @override
+  void dispose() {
+    _db.removeListener(_load);
+    super.dispose();
+  }
 }

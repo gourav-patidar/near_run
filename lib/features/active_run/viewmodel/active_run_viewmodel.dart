@@ -164,6 +164,8 @@ class ActiveRunViewModel extends ChangeNotifier {
       final initial = await _gps.getCurrentPosition();
       if (initial != null) {
         _currentPosition = initial;
+        notifyListeners();
+        _safeMoveMap(initial);
       }
 
       final started = await _gps.startTracking();
@@ -289,17 +291,23 @@ class ActiveRunViewModel extends ChangeNotifier {
     await _gps.stopTracking();
     WakelockPlus.disable();
 
-    if (_startTime == null || _distanceMeters < 50 || _routePoints.length < 2) {
+    if (_startTime == null) {
       return null;
     }
+
+    final points = routeLatLngs.isNotEmpty
+        ? routeLatLngs
+        : (_currentPosition != null ? [_currentPosition!] : <LatLng>[]);
+
+    if (points.isEmpty) return null;
 
     return RunModel(
       startTime: _startTime!,
       endTime: DateTime.now(),
       distanceMeters: _distanceMeters,
       durationSeconds: elapsedSeconds,
-      routePoints: routeLatLngs,
-      avgPaceSecondsPerKm: paceSeconds.toDouble(),
+      routePoints: points,
+      avgPaceSecondsPerKm: paceSeconds > 0 ? paceSeconds.toDouble() : 0,
       elevationGainMeters: _elevationGainMeters,
       avgHeartRate: _heartRateBpm > 0 ? _heartRateBpm : null,
     );

@@ -5,110 +5,123 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../main.dart' show AppShell;
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
-
-  @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
-}
-
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  final _pageController = PageController();
-  final _nameController = TextEditingController();
-
-  int _index = 0;
-  double _weightKg = 70;
-  double _dailyGoalKm = 5;
-  bool _saving = false;
 
   static const _totalPages = 4;
 
   @override
-  void dispose() {
-    _pageController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  void _next() {
-    FocusScope.of(context).unfocus();
-    if (_index == 1 && _nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your name so we can greet you.'),
-        ),
-      );
-      return;
-    }
-    if (_index == _totalPages - 1) {
-      _finish();
-      return;
-    }
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  void _back() {
-    if (_index == 0) return;
-    _pageController.previousPage(
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  Future<void> _finish() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    await UserPreferencesService.instance.completeOnboarding(
-      name: _nameController.text,
-      weightKg: _weightKg,
-      dailyGoalKm: _dailyGoalKm,
-    );
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 320),
-        pageBuilder: (_, __, ___) => const AppShell(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final pageController = PageController();
+    final nameController = TextEditingController();
+
+    final currentIndex = ValueNotifier<int>(0);
+    final weightKg = ValueNotifier<double>(70);
+    final dailyGoalKm = ValueNotifier<double>(5);
+    final isSaving = ValueNotifier<bool>(false);
+
+    void next() {
+      HapticFeedback.lightImpact();
+      FocusScope.of(context).unfocus();
+      final idx = currentIndex.value;
+
+      if (idx == 1 && nameController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter your name so we can greet you.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      if (idx == _totalPages - 1) {
+        if (isSaving.value) return;
+        isSaving.value = true;
+        UserPreferencesService.instance
+            .completeOnboarding(
+              name: nameController.text,
+              weightKg: weightKg.value,
+              dailyGoalKm: dailyGoalKm.value,
+            )
+            .then((_) {
+          if (!context.mounted) return;
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 320),
+              pageBuilder: (_, __, ___) => const AppShell(),
+              transitionsBuilder: (_, anim, __, child) =>
+                  FadeTransition(opacity: anim, child: child),
+            ),
+          );
+        });
+        return;
+      }
+
+      pageController.nextPage(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    void back() {
+      HapticFeedback.lightImpact();
+      if (currentIndex.value == 0) return;
+      pageController.previousPage(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            _Header(index: _index, total: _totalPages, onBack: _back),
+            ValueListenableBuilder<int>(
+              valueListenable: currentIndex,
+              builder: (_, idx, __) => _Header(
+                index: idx,
+                total: _totalPages,
+                onBack: back,
+              ),
+            ),
             Expanded(
               child: PageView(
-                controller: _pageController,
+                controller: pageController,
                 physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (i) => setState(() => _index = i),
+                onPageChanged: (i) => currentIndex.value = i,
                 children: [
                   const _WelcomePage(),
-                  _NamePage(controller: _nameController),
-                  _WeightPage(
-                    value: _weightKg,
-                    onChanged: (v) => setState(() => _weightKg = v),
+                  _NamePage(controller: nameController),
+                  ValueListenableBuilder<double>(
+                    valueListenable: weightKg,
+                    builder: (_, w, __) => _WeightPage(
+                      value: w,
+                      onChanged: (v) => weightKg.value = v,
+                    ),
                   ),
-                  _DailyGoalPage(
-                    value: _dailyGoalKm,
-                    onChanged: (v) => setState(() => _dailyGoalKm = v),
+                  ValueListenableBuilder<double>(
+                    valueListenable: dailyGoalKm,
+                    builder: (_, g, __) => _DailyGoalPage(
+                      value: g,
+                      onChanged: (v) => dailyGoalKm.value = v,
+                    ),
                   ),
                 ],
               ),
             ),
-            _BottomBar(
-              index: _index,
-              total: _totalPages,
-              onNext: _next,
-              saving: _saving,
+            ValueListenableBuilder<int>(
+              valueListenable: currentIndex,
+              builder: (_, idx, __) => ValueListenableBuilder<bool>(
+                valueListenable: isSaving,
+                builder: (_, saving, __) => _BottomBar(
+                  index: idx,
+                  total: _totalPages,
+                  onNext: next,
+                  saving: saving,
+                ),
+              ),
             ),
           ],
         ),
@@ -140,7 +153,7 @@ class _Header extends StatelessWidget {
             icon: Icon(
               Icons.arrow_back_rounded,
               color: index == 0
-                  ? AppColors.onSurfaceVariant.withOpacity(0.3)
+                  ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
                   : AppColors.onSurface,
             ),
           ),
@@ -160,6 +173,7 @@ class _Header extends StatelessWidget {
             '${index + 1} / $total',
             style: AppTextStyles.labelMedium.copyWith(
               color: AppColors.onSurfaceVariant,
+              fontSize: 12,
             ),
           ),
         ],
@@ -176,55 +190,56 @@ class _WelcomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Spacer(),
           Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.primaryContainer,
             ),
             child: const Icon(
               Icons.directions_run_rounded,
               color: AppColors.primary,
-              size: 52,
+              size: 42,
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
           Text(
             'Welcome to NearRun',
-            style: AppTextStyles.displaySmall.copyWith(
-              fontSize: 40,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1,
+            style: AppTextStyles.headlineMedium.copyWith(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             'Track your runs with GPS — no account, no internet required. '
             'Your routes stay on your device.',
-            style: AppTextStyles.bodyLarge.copyWith(
+            style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.onSurfaceVariant,
-              height: 1.45,
+              fontSize: 13,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           const _FeatureBullet(
             icon: Icons.gps_fixed_rounded,
             title: 'Real GPS tracking',
             body: 'Distance, pace, and elevation recorded in real time.',
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           const _FeatureBullet(
             icon: Icons.cloud_off_rounded,
             title: '100% offline',
             body: 'Every run is saved locally. No cloud, no tracking.',
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           const _FeatureBullet(
             icon: Icons.insights_rounded,
             title: 'Your progress',
@@ -253,24 +268,27 @@ class _FeatureBullet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 44,
-          height: 44,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(14),
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: AppColors.primary, size: 22),
+          child: Icon(icon, color: AppColors.primary, size: 20),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: AppTextStyles.titleMedium),
+              Text(title, style: AppTextStyles.titleMedium.copyWith(fontSize: 15)),
               const SizedBox(height: 2),
               Text(
                 body,
-                style: AppTextStyles.bodySmall.copyWith(height: 1.4),
+                style: AppTextStyles.bodySmall.copyWith(
+                  fontSize: 12,
+                  height: 1.3,
+                ),
               ),
             ],
           ),
@@ -289,20 +307,21 @@ class _NamePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text("What's your name?", style: _titleStyle()),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
             "We'll use it in your greeting and stats.",
-            style: AppTextStyles.bodyLarge.copyWith(
+            style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 28),
           TextField(
             controller: controller,
             autofocus: true,
@@ -311,16 +330,18 @@ class _NamePage extends StatelessWidget {
             style: AppTextStyles.headlineSmall.copyWith(
               color: AppColors.onSurface,
               fontWeight: FontWeight.w700,
+              fontSize: 18,
             ),
             decoration: InputDecoration(
               hintText: 'Your first name',
               hintStyle: AppTextStyles.headlineSmall.copyWith(
-                color: AppColors.onSurfaceVariant.withOpacity(0.5),
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
                 fontWeight: FontWeight.w500,
+                fontSize: 18,
               ),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 22,
+                horizontal: 18,
+                vertical: 18,
               ),
             ),
           ),
@@ -341,17 +362,18 @@ class _WeightPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text('Your weight?', style: _titleStyle()),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
             'Used to estimate calories burned. We never share this.',
-            style: AppTextStyles.bodyLarge.copyWith(
+            style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
           const Spacer(),
@@ -364,20 +386,21 @@ class _WeightPage extends StatelessWidget {
                 Text(
                   value.round().toString(),
                   style: AppTextStyles.displayLarge.copyWith(
-                    fontSize: 96,
+                    fontSize: 48,
                     fontWeight: FontWeight.w900,
                     color: AppColors.primary,
-                    letterSpacing: -3,
+                    letterSpacing: -2,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'kg',
-                    style: AppTextStyles.titleLarge.copyWith(
+                    style: AppTextStyles.titleMedium.copyWith(
                       color: AppColors.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -409,17 +432,18 @@ class _DailyGoalPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text('Daily goal', style: _titleStyle()),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
             'How far would you like to run each day? You can change this later.',
-            style: AppTextStyles.bodyLarge.copyWith(
+            style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
           const Spacer(),
@@ -432,20 +456,21 @@ class _DailyGoalPage extends StatelessWidget {
                 Text(
                   value.toStringAsFixed(1),
                   style: AppTextStyles.displayLarge.copyWith(
-                    fontSize: 96,
+                    fontSize: 48,
                     fontWeight: FontWeight.w900,
                     color: AppColors.primary,
-                    letterSpacing: -3,
+                    letterSpacing: -2,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'km',
-                    style: AppTextStyles.titleLarge.copyWith(
+                    style: AppTextStyles.titleMedium.copyWith(
                       color: AppColors.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -467,10 +492,11 @@ class _DailyGoalPage extends StatelessWidget {
   }
 }
 
-TextStyle _titleStyle() => AppTextStyles.displaySmall.copyWith(
-      fontSize: 38,
-      fontWeight: FontWeight.w900,
-      letterSpacing: -1,
+TextStyle _titleStyle() => AppTextStyles.headlineMedium.copyWith(
+      fontSize: 22,
+      fontWeight: FontWeight.w800,
+      color: AppColors.onSurface,
+      letterSpacing: -0.5,
     );
 
 // ─── Bottom bar ───────────────────────────────────────────────────────────────
@@ -495,7 +521,7 @@ class _BottomBar extends StatelessWidget {
         24,
         8,
         24,
-        MediaQuery.of(context).padding.bottom + 16,
+        MediaQuery.of(context).padding.bottom + 12,
       ),
       child: SizedBox(
         width: double.infinity,
@@ -504,9 +530,9 @@ class _BottomBar extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 20),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(20),
             ),
           ),
           child: Text(
@@ -515,7 +541,7 @@ class _BottomBar extends StatelessWidget {
                 : isLast
                     ? "Let's Run"
                     : 'Continue',
-            style: AppTextStyles.labelLarge.copyWith(fontSize: 16),
+            style: AppTextStyles.labelLarge.copyWith(fontSize: 15),
           ),
         ),
       ),

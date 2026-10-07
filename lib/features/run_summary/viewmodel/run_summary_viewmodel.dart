@@ -11,8 +11,6 @@ class RunSummaryViewModel extends ChangeNotifier {
   RunModel _run;
   RunModel get run => _run;
 
-  /// True if the run is already persisted (viewing from history).
-  /// False after a just-completed run — then the view shows Save / Discard.
   final bool isReadOnly;
 
   bool _isSaving = false;
@@ -22,7 +20,25 @@ class RunSummaryViewModel extends ChangeNotifier {
   bool get isDeleting => _isDeleting;
 
   RunSummaryViewModel({required RunModel run, required this.isReadOnly})
-      : _run = run;
+      : _run = run {
+    if (!isReadOnly && _run.id == null) {
+      _autoSaveRun();
+    }
+  }
+
+  Future<void> _autoSaveRun() async {
+    _isSaving = true;
+    notifyListeners();
+
+    try {
+      _run = await _db.createRun(_run);
+    } catch (e) {
+      debugPrint('Auto save run failed: $e');
+    }
+
+    _isSaving = false;
+    notifyListeners();
+  }
 
   String get runName {
     final h = _run.startTime.hour;
@@ -33,37 +49,26 @@ class RunSummaryViewModel extends ChangeNotifier {
     return 'Night Run';
   }
 
-  /// Rough calorie estimate — ~1 kcal/kg/km, which lands within ~15% of
-  /// most trackers. Uses the weight set during onboarding.
   int get estimatedCalories => (_run.distanceKm * _prefs.weightKg).round();
 
   Future<void> saveRun(BuildContext context) async {
-    if (_isSaving || isReadOnly) return;
-    _isSaving = true;
-    notifyListeners();
-
-    try {
-      _run = await _db.createRun(_run);
-    } catch (e) {
-      debugPrint('Save run failed: $e');
-      _isSaving = false;
-      notifyListeners();
-      return;
-    }
-
-    _isSaving = false;
-    notifyListeners();
     if (context.mounted) {
       Navigator.of(context).pop(true);
     }
   }
 
   void discardRun(BuildContext context) {
-    Navigator.of(context).pop(false);
+    if (_run.id != null) {
+      _db.deleteRun(_run.id!).then((_) {
+        if (context.mounted) Navigator.of(context).pop(false);
+      });
+    } else {
+      Navigator.of(context).pop(false);
+    }
   }
 
   Future<void> deleteRun(BuildContext context) async {
-    if (!isReadOnly || _run.id == null || _isDeleting) return;
+    if (_run.id == null || _isDeleting) return;
     _isDeleting = true;
     notifyListeners();
     try {

@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/run_model.dart';
 
 // ─── Database Service ─────────────────────────────────────────────────────────
 
-class DatabaseService {
+class DatabaseService extends ChangeNotifier {
   static final DatabaseService instance = DatabaseService._init();
   static Database? _database;
 
@@ -52,7 +53,9 @@ class DatabaseService {
   Future<RunModel> createRun(RunModel run) async {
     final db = await database;
     final id = await db.insert('runs', run.toMap());
-    return run.copyWith(id: id);
+    final newRun = run.copyWith(id: id);
+    notifyListeners();
+    return newRun;
   }
 
   // ── Get single run ──────────────────────────────────────────────────────────
@@ -108,14 +111,18 @@ class DatabaseService {
 
   Future<int> updateRun(RunModel run) async {
     final db = await database;
-    return db.update('runs', run.toMap(), where: 'id = ?', whereArgs: [run.id]);
+    final count = await db.update('runs', run.toMap(), where: 'id = ?', whereArgs: [run.id]);
+    notifyListeners();
+    return count;
   }
 
   // ── Delete run ──────────────────────────────────────────────────────────────
 
   Future<int> deleteRun(int id) async {
     final db = await database;
-    return await db.delete('runs', where: 'id = ?', whereArgs: [id]);
+    final count = await db.delete('runs', where: 'id = ?', whereArgs: [id]);
+    notifyListeners();
+    return count;
   }
 
   // ── Get statistics ──────────────────────────────────────────────────────────
@@ -198,8 +205,6 @@ class DatabaseService {
 
     final now = DateTime.now();
     var cursor = DateTime(now.year, now.month, now.day);
-    // Allow streak to start either today or yesterday (so we don't break the
-    // streak at 00:01 before the user runs).
     if (!days.contains(cursor)) {
       cursor = cursor.subtract(const Duration(days: 1));
       if (!days.contains(cursor)) return 0;

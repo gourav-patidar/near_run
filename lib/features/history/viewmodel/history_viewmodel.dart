@@ -15,11 +15,10 @@ class HistoryViewModel extends ChangeNotifier {
 
   HistoryViewModel() {
     _loadRuns();
+    _db.addListener(_loadRuns);
   }
 
   Future<void> _loadRuns() async {
-    _isLoading = true;
-    notifyListeners();
     try {
       _runs = await _db.getAllRuns();
     } catch (e) {
@@ -34,7 +33,11 @@ class HistoryViewModel extends ChangeNotifier {
 
   Future<void> deleteRun(int id) async {
     await _db.deleteRun(id);
-    _runs = _runs.where((r) => r.id != id).toList();
-    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _db.removeListener(_loadRuns);
+    super.dispose();
   }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/run_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_top_bar.dart';
 import '../../core/widgets/route_preview.dart';
 import '../run_summary/run_summary_screen.dart';
 import 'viewmodel/history_viewmodel.dart';
@@ -27,89 +28,49 @@ class _HistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: const AppTopBar(),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            Expanded(
-              child: Consumer<HistoryViewModel>(
-                builder: (_, vm, __) {
-                  if (vm.isLoading) {
-                    return const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary),
-                    );
-                  }
-                  if (vm.isEmpty) return const _EmptyState();
-                  return RefreshIndicator(
-                    color: AppColors.primary,
-                    onRefresh: vm.refresh,
-                    child: CustomScrollView(
-                      slivers: [
-                        const SliverToBoxAdapter(child: _HistoryHeading()),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                          sliver: SliverList.separated(
-                            itemCount: vm.runs.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 16),
-                            itemBuilder: (ctx, i) => _RunCard(
-                              run: vm.runs[i],
-                              onTap: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => RunSummaryScreen(
-                                      run: vm.runs[i],
-                                      isReadOnly: true,
-                                    ),
-                                  ),
-                                );
-                                // Reload in case the user deleted the run from Summary.
-                                vm.refresh();
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: Row(
-        children: [
-          Text(
-            'near_run',
-            style: AppTextStyles.brandTitle.copyWith(
-              fontStyle: FontStyle.italic,
-              letterSpacing: -0.8,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary, width: 2),
-              color: AppColors.primaryContainer,
-            ),
-            child: const Icon(
-              Icons.person_rounded,
+        top: false,
+        child: Consumer<HistoryViewModel>(
+          builder: (_, vm, __) {
+            if (vm.isLoading) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
+            if (vm.isEmpty) return const _EmptyState();
+            return RefreshIndicator(
               color: AppColors.primary,
-              size: 20,
-            ),
-          ),
-        ],
+              onRefresh: vm.refresh,
+              child: CustomScrollView(
+                slivers: [
+                  const SliverToBoxAdapter(child: _HistoryHeading()),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                    sliver: SliverList.separated(
+                      itemCount: vm.runs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (ctx, i) => _RunCard(
+                        run: vm.runs[i],
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RunSummaryScreen(
+                                run: vm.runs[i],
+                                isReadOnly: true,
+                              ),
+                            ),
+                          );
+                          vm.refresh();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -121,24 +82,25 @@ class _HistoryHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'History',
-            style: AppTextStyles.displaySmall.copyWith(
-              fontWeight: FontWeight.w900,
-              fontSize: 52,
-              letterSpacing: -2,
+            style: AppTextStyles.headlineMedium.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 22,
               color: AppColors.onSurface,
+              letterSpacing: -0.5,
             ),
-            textAlign: TextAlign.right,
           ),
+          const SizedBox(height: 2),
           Text(
             'YOUR KINETIC JOURNEY',
             style: AppTextStyles.chipLabel.copyWith(
-              letterSpacing: 2.5,
+              fontSize: 11,
+              letterSpacing: 1.5,
               color: AppColors.onSurfaceVariant,
             ),
           ),
@@ -179,12 +141,12 @@ class _RunCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
               color: AppColors.cardShadow,
-              blurRadius: 20,
-              offset: const Offset(0, 6),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -192,7 +154,7 @@ class _RunCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -200,19 +162,20 @@ class _RunCard extends StatelessWidget {
                     _dateLabel,
                     style: AppTextStyles.labelSmall.copyWith(
                       color: AppColors.primary,
+                      fontSize: 10,
                       letterSpacing: 1,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     _title,
                     style: AppTextStyles.headlineSmall.copyWith(
                       fontWeight: FontWeight.w800,
-                      fontSize: 26,
+                      fontSize: 20,
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       _StatItem(
@@ -221,14 +184,14 @@ class _RunCard extends StatelessWidget {
                         unit: 'km',
                         valueColor: AppColors.primary,
                       ),
-                      const SizedBox(width: 28),
+                      const SizedBox(width: 24),
                       _StatItem(
                         label: 'TIME',
                         value: run.durationFormatted,
                         unit: '',
                         valueColor: AppColors.onSurface,
                       ),
-                      const SizedBox(width: 28),
+                      const SizedBox(width: 24),
                       _StatItem(
                         label: 'PACE',
                         value: run.paceFormatted ?? '--',
@@ -242,9 +205,9 @@ class _RunCard extends StatelessWidget {
             ),
             ClipRRect(
               borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(24)),
+                  const BorderRadius.vertical(bottom: Radius.circular(20)),
               child: SizedBox(
-                height: 160,
+                height: 140,
                 width: double.infinity,
                 child: RoutePreview(points: run.routePoints),
               ),
@@ -274,7 +237,7 @@ class _StatItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.chipLabel),
+        Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
         const SizedBox(height: 2),
         Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -283,7 +246,7 @@ class _StatItem extends StatelessWidget {
             Text(
               value,
               style: AppTextStyles.headlineSmall.copyWith(
-                fontSize: 22,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: valueColor,
                 letterSpacing: -0.5,
@@ -291,7 +254,7 @@ class _StatItem extends StatelessWidget {
             ),
             if (unit.isNotEmpty) ...[
               const SizedBox(width: 2),
-              Text(unit, style: AppTextStyles.bodySmall),
+              Text(unit, style: AppTextStyles.bodySmall.copyWith(fontSize: 11)),
             ],
           ],
         ),
@@ -311,20 +274,20 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(
             Icons.directions_run_rounded,
-            size: 64,
-            color: AppColors.primary.withOpacity(0.3),
+            size: 48,
+            color: AppColors.primary.withValues(alpha: 0.3),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
             'No runs yet',
-            style: AppTextStyles.titleLarge.copyWith(
+            style: AppTextStyles.titleMedium.copyWith(
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             'Start your first run from the home screen',
-            style: AppTextStyles.bodyMedium,
+            style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
         ],

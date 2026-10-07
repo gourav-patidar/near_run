@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
 
@@ -15,7 +16,11 @@ class AppBottomNav extends StatelessWidget {
   });
 
   static const _items = [
-    (icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
+    (
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Home',
+    ),
     (
       icon: Icons.history_outlined,
       activeIcon: Icons.history_rounded,
@@ -30,44 +35,59 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom + 8,
-            top: 12,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.75),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(
-                color: AppColors.outlineVariant.withOpacity(0.3),
-                width: 0.5,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.only(
+          bottom: 12,
+          left: 20,
+          right: 20,
+          top: 6,
+        ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                height: 64,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(_items.length, (i) {
+                    final item = _items[i];
+                    final isActive = i == currentIndex;
+                    return _AppBottomNavItem(
+                      icon: item.icon,
+                      activeIcon: item.activeIcon,
+                      label: item.label,
+                      isActive: isActive,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        onTap(i);
+                      },
+                    );
+                  }),
+                ),
               ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.onSurface.withOpacity(0.06),
-                blurRadius: 24,
-                offset: const Offset(0, -6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(_items.length, (i) {
-              final item = _items[i];
-              final isActive = i == currentIndex;
-              return _AppBottomNavItem(
-                icon: item.icon,
-                activeIcon: item.activeIcon,
-                label: item.label,
-                isActive: isActive,
-                onTap: () => onTap(i),
-              );
-            }),
           ),
         ),
       ),
@@ -96,36 +116,33 @@ class _AppBottomNavItem extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isActive ? AppColors.navActiveBackground : Colors.transparent,
+          color: isActive ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(99),
         ),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                isActive ? activeIcon : icon,
-                key: ValueKey(isActive),
-                color: isActive
-                    ? AppColors.primary
-                    : AppColors.onSurfaceVariant,
-                size: 24,
-              ),
+            Icon(
+              isActive ? activeIcon : icon,
+              color: isActive ? Colors.white : AppColors.onSurfaceVariant,
+              size: 22,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label.toUpperCase(),
-              style: AppTextStyles.navLabel.copyWith(
-                color: isActive
-                    ? AppColors.primary
-                    : AppColors.onSurfaceVariant,
+            if (isActive) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  letterSpacing: 0.3,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

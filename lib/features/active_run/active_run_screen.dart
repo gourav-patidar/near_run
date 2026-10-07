@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -38,10 +39,10 @@ class _ActiveRunView extends StatelessWidget {
             children: [
               const _MapLayer(),
               const _ActiveRunAppBar(),
-              const Positioned(top: 100, left: 20, child: _ElevationCard()),
+              const Positioned(top: 100, left: 16, child: _ElevationCard()),
               Positioned(
-                right: 20,
-                bottom: 360,
+                right: 16,
+                bottom: 310,
                 child: _RecenterButton(onTap: vm.recenterMap),
               ),
               Positioned(
@@ -62,11 +63,9 @@ class _ActiveRunView extends StatelessWidget {
   void _handleStop(BuildContext context, RunModel? run) async {
     if (!context.mounted) return;
     if (run == null) {
-      // Too short — just leave without saving anything.
       Navigator.of(context).pop();
       return;
     }
-    // Replace the active run screen with the summary, so back goes to Home.
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => RunSummaryScreen(run: run)),
     );
@@ -90,11 +89,11 @@ class _InitializingView extends StatelessWidget {
             'Getting GPS fix…',
             style: TextStyle(
               color: AppColors.onSurface,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: 8),
+          SizedBox(height: 6),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 48),
             child: Text(
@@ -102,7 +101,7 @@ class _InitializingView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.onSurfaceVariant,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
           ),
@@ -126,7 +125,7 @@ class _ErrorView extends StatelessWidget {
           children: [
             const Icon(
               Icons.location_off_rounded,
-              size: 64,
+              size: 56,
               color: AppColors.primary,
             ),
             const SizedBox(height: 16),
@@ -135,6 +134,7 @@ class _ErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyLarge.copyWith(
                 color: AppColors.onSurface,
+                fontSize: 15,
               ),
             ),
             const SizedBox(height: 24),
@@ -149,8 +149,8 @@ class _ErrorView extends StatelessWidget {
                     backgroundColor: AppColors.surfaceContainerHigh,
                     foregroundColor: AppColors.onSurface,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
+                      horizontal: 20,
+                      vertical: 14,
                     ),
                   ),
                   child: const Text('Go Back'),
@@ -163,11 +163,11 @@ class _ErrorView extends StatelessWidget {
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.onPrimary,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
-                    icon: const Icon(Icons.settings_outlined, size: 20),
+                    icon: const Icon(Icons.settings_outlined, size: 18),
                     label: const Text('Open Settings'),
                   ),
                 if (vm.needsLocationService)
@@ -178,11 +178,11 @@ class _ErrorView extends StatelessWidget {
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.onPrimary,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
-                    icon: const Icon(Icons.gps_fixed_rounded, size: 20),
+                    icon: const Icon(Icons.gps_fixed_rounded, size: 18),
                     label: const Text('Turn On GPS'),
                   ),
               ],
@@ -203,79 +203,121 @@ class _MapLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ActiveRunViewModel>(
       builder: (_, vm, __) {
-        return FlutterMap(
-          mapController: vm.mapController,
-          options: MapOptions(
-            initialCenter:
-                vm.currentPosition ?? const LatLng(0.0, 0.0),
-            initialZoom: 16.0,
-            minZoom: 3.0,
-            maxZoom: 19.0,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
-          ),
+        return Stack(
           children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.gourav.near_run',
-              // Offline-friendly: missing tiles just render blank, polyline
-              // still shows correctly on top.
-              errorTileCallback: (_, __, ___) {},
-            ),
-            if (vm.routeLatLngs.isNotEmpty)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: vm.routeLatLngs,
-                    strokeWidth: 6.0,
-                    color: AppColors.primary,
-                    borderColor: Colors.white,
-                    borderStrokeWidth: 2.0,
-                  ),
-                ],
+            const _OfflineMapBackground(),
+            FlutterMap(
+              mapController: vm.mapController,
+              options: MapOptions(
+                initialCenter:
+                    vm.currentPosition ?? const LatLng(0.0, 0.0),
+                initialZoom: 16.0,
+                minZoom: 3.0,
+                maxZoom: 19.0,
+                onMapReady: () {
+                  if (vm.currentPosition != null) {
+                    vm.mapController.move(vm.currentPosition!, 16.0);
+                  }
+                },
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
               ),
-            if (vm.currentPosition != null)
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: vm.currentPosition!,
-                    width: 40,
-                    height: 40,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.primary.withOpacity(0.2),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.near_run',
+                  errorTileCallback: (_, __, ___) {},
+                ),
+                if (vm.routeLatLngs.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: vm.routeLatLngs,
+                        strokeWidth: 5.0,
+                        color: AppColors.primary,
+                        borderColor: Colors.white,
+                        borderStrokeWidth: 2.0,
                       ),
-                      child: Center(
+                    ],
+                  ),
+                if (vm.currentPosition != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: vm.currentPosition!,
+                        width: 36,
+                        height: 36,
                         child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.primary,
+                            color: AppColors.primary.withValues(alpha: 0.2),
                           ),
                           child: Center(
                             child: Container(
-                              width: 8,
-                              height: 8,
+                              width: 14,
+                              height: 14,
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white,
+                                color: AppColors.primary,
+                              ),
+                              child: Center(
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+              ],
+            ),
           ],
         );
       },
     );
   }
+}
+
+class _OfflineMapBackground extends StatelessWidget {
+  const _OfflineMapBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFE5ECE9),
+      child: CustomPaint(
+        painter: _GridPatternPainter(),
+      ),
+    );
+  }
+}
+
+class _GridPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.08)
+      ..strokeWidth = 1.0;
+
+    const step = 40.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ─── App bar ──────────────────────────────────────────────────────────────────
@@ -300,10 +342,11 @@ class _ActiveRunAppBar extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                'near_run',
+                'NearRun',
                 style: AppTextStyles.brandTitle.copyWith(
-                  fontStyle: FontStyle.italic,
-                  letterSpacing: -1,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  letterSpacing: -0.6,
                 ),
               ),
               const Spacer(),
@@ -337,22 +380,28 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(99),
-        boxShadow: [BoxShadow(color: AppColors.cardShadow, blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 8,
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
           Text(
             label,
             style: AppTextStyles.labelSmall.copyWith(
               color: AppColors.onSurface,
-              letterSpacing: 1,
+              fontSize: 10,
+              letterSpacing: 0.8,
             ),
           ),
         ],
@@ -375,13 +424,13 @@ class _GlassIconButton extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.onSurface, size: 22),
+            child: Icon(icon, color: AppColors.onSurface, size: 20),
           ),
         ),
       ),
@@ -398,20 +447,20 @@ class _ElevationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ActiveRunViewModel>(
       builder: (_, vm, __) => ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
-            width: 130,
-            padding: const EdgeInsets.all(16),
+            width: 110,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.cardShadow,
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -422,30 +471,34 @@ class _ElevationCard extends StatelessWidget {
                   'ELEVATION',
                   style: AppTextStyles.chipLabel.copyWith(
                     color: AppColors.primary,
-                    fontSize: 10,
+                    fontSize: 9,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 RichText(
                   text: TextSpan(
                     children: [
                       TextSpan(
                         text: '${vm.elevationMeters}',
                         style: AppTextStyles.headlineMedium.copyWith(
-                          fontSize: 36,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.onSurface,
                         ),
                       ),
-                      TextSpan(text: ' m', style: AppTextStyles.bodyMedium),
+                      TextSpan(
+                        text: ' m',
+                        style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: vm.elevationProgress,
-                    minHeight: 10,
+                    minHeight: 6,
                     backgroundColor: AppColors.surfaceContainerLow,
                     valueColor: const AlwaysStoppedAnimation(
                       AppColors.primaryContainer,
@@ -472,23 +525,23 @@ class _RecenterButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 48,
-        height: 48,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
               color: AppColors.cardShadow,
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
         child: const Icon(
           Icons.my_location_rounded,
           color: AppColors.onSurface,
-          size: 22,
+          size: 20,
         ),
       ),
     );
@@ -506,25 +559,25 @@ class _StatsBottomSheet extends StatelessWidget {
     return Consumer<ActiveRunViewModel>(
       builder: (_, vm, __) => Container(
         padding: EdgeInsets.only(
-          top: 24,
-          left: 24,
-          right: 24,
-          bottom: MediaQuery.of(context).padding.bottom + 16,
+          top: 20,
+          left: 20,
+          right: 20,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('DISTANCE', style: AppTextStyles.chipLabel),
+                    Text('DISTANCE', style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
                     const SizedBox(height: 2),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -533,28 +586,29 @@ class _StatsBottomSheet extends StatelessWidget {
                         Text(
                           vm.distanceWhole,
                           style: AppTextStyles.displayLarge.copyWith(
-                            fontSize: 72,
+                            fontSize: 48,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -3,
+                            letterSpacing: -2,
                             color: AppColors.onSurface,
                           ),
                         ),
                         Text(
                           vm.distanceDecimal,
                           style: AppTextStyles.displayLarge.copyWith(
-                            fontSize: 72,
+                            fontSize: 48,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -3,
+                            letterSpacing: -2,
                             color: AppColors.onSurface,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.only(bottom: 6),
                           child: Text(
                             'km',
-                            style: AppTextStyles.titleLarge.copyWith(
+                            style: AppTextStyles.titleMedium.copyWith(
                               color: AppColors.onSurfaceVariant,
+                              fontSize: 16,
                             ),
                           ),
                         ),
@@ -563,62 +617,39 @@ class _StatsBottomSheet extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                _PausePlayButton(vm: vm),
+                _PausePlayButton(
+                  vm: vm,
+                  onStop: () async {
+                    final run = await vm.stopAndBuildRun();
+                    onStopComplete(run);
+                  },
+                ),
               ],
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onLongPress: () async {
-                  final run = await vm.stopAndBuildRun();
-                  onStopComplete(run);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'HOLD TO STOP',
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.primary,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: _RunMetric(
-                    icon: Icons.speed_rounded,
-                    label: 'CURRENT PACE',
-                    value: vm.paceFormatted,
-                    unit: '/km',
-                  ),
+                _RunMetric(
+                  icon: Icons.speed_rounded,
+                  label: 'PACE',
+                  value: vm.paceFormatted,
+                  unit: '/km',
                 ),
-                Container(
-                  width: 1,
-                  height: 48,
-                  color: AppColors.outlineVariant,
-                ),
-                Expanded(
-                  child: _RunMetric(
-                    icon: Icons.timer_outlined,
-                    label: 'DURATION',
-                    value: vm.durationFormatted,
-                    unit: '',
-                    align: TextAlign.right,
-                  ),
+                const SizedBox(width: 24),
+                _RunMetric(
+                  icon: Icons.timer_outlined,
+                  label: 'TIME',
+                  value: vm.durationFormatted,
+                  unit: '',
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            _SlideToStopTrack(
+              onStop: () async {
+                final run = await vm.stopAndBuildRun();
+                onStopComplete(run);
+              },
             ),
           ],
         ),
@@ -629,23 +660,31 @@ class _StatsBottomSheet extends StatelessWidget {
 
 class _PausePlayButton extends StatelessWidget {
   final ActiveRunViewModel vm;
-  const _PausePlayButton({required this.vm});
+  final VoidCallback onStop;
+  const _PausePlayButton({required this.vm, required this.onStop});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: vm.togglePause,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        vm.togglePause();
+      },
+      onLongPress: () {
+        HapticFeedback.heavyImpact();
+        onStop();
+      },
       child: Container(
-        width: 80,
-        height: 80,
+        width: 60,
+        height: 60,
         decoration: BoxDecoration(
           color: AppColors.primaryContainer,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(0.25),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: AppColors.primary.withValues(alpha: 0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -655,10 +694,116 @@ class _PausePlayButton extends StatelessWidget {
             vm.isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
             key: ValueKey(vm.isRunning),
             color: AppColors.primary,
-            size: 40,
+            size: 32,
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SlideToStopTrack extends StatefulWidget {
+  final VoidCallback onStop;
+  const _SlideToStopTrack({required this.onStop});
+
+  @override
+  State<_SlideToStopTrack> createState() => _SlideToStopTrackState();
+}
+
+class _SlideToStopTrackState extends State<_SlideToStopTrack> {
+  double _dragValue = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trackWidth = constraints.maxWidth;
+        const knobSize = 44.0;
+        final maxDragDistance = trackWidth - knobSize - 8;
+
+        return Container(
+          height: 48,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(
+              color: AppColors.outlineVariant.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Center(
+                child: Opacity(
+                  opacity: (1.0 - (_dragValue * 1.5)).clamp(0.0, 1.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'SLIDE TO FINISH & SAVE',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.double_arrow_rounded,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 4 + (_dragValue * maxDragDistance),
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    setState(() {
+                      final delta = details.primaryDelta! / maxDragDistance;
+                      _dragValue = (_dragValue + delta).clamp(0.0, 1.0);
+                    });
+                  },
+                  onHorizontalDragEnd: (_) {
+                    if (_dragValue >= 0.75) {
+                      setState(() => _dragValue = 1.0);
+                      HapticFeedback.heavyImpact();
+                      widget.onStop();
+                    } else {
+                      setState(() => _dragValue = 0.0);
+                    }
+                  },
+                  child: Container(
+                    width: knobSize,
+                    height: knobSize,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -668,57 +813,46 @@ class _RunMetric extends StatelessWidget {
   final String label;
   final String value;
   final String unit;
-  final TextAlign align;
 
   const _RunMetric({
     required this.icon,
     required this.label,
     required this.value,
     required this.unit,
-    this.align = TextAlign.left,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isRight = align == TextAlign.right;
-    return Padding(
-      padding: EdgeInsets.only(left: isRight ? 20 : 0, right: isRight ? 0 : 20),
-      child: Column(
-        crossAxisAlignment:
-            isRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment:
-                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: [
-              Icon(icon, size: 16, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Text(label, style: AppTextStyles.chipLabel),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment:
-                isRight ? MainAxisAlignment.end : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: AppTextStyles.headlineMedium.copyWith(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.onSurface,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: AppColors.primary),
+            const SizedBox(width: 4),
+            Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 9)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: AppTextStyles.headlineMedium.copyWith(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppColors.onSurface,
               ),
-              if (unit.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text(unit, style: AppTextStyles.bodyMedium),
-              ],
+            ),
+            if (unit.isNotEmpty) ...[
+              const SizedBox(width: 2),
+              Text(unit, style: AppTextStyles.bodySmall.copyWith(fontSize: 10)),
             ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }
