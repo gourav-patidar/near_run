@@ -96,6 +96,12 @@ class ProfileViewModel extends ChangeNotifier {
   ProfileViewModel() {
     _load();
     _db.addListener(_load);
+    _prefs.addListener(notifyListeners);
+  }
+
+  Future<void> updateName(String newName) async {
+    await _prefs.updateName(newName);
+    notifyListeners();
   }
 
   Future<void> _load() async {
@@ -129,6 +135,7 @@ class ProfileViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _db.removeListener(_load);
+    _prefs.removeListener(notifyListeners);
     super.dispose();
   }
 

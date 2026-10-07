@@ -43,17 +43,17 @@ class _RunSummaryView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 32),
             children: [
               _TopBar(run: vm.run, runName: vm.runName),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _MapRecapCard(points: vm.run.routePoints),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _RecapHeader(vm: vm),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
@@ -63,13 +63,13 @@ class _RunSummaryView extends StatelessWidget {
                       value: vm.run.distanceFormatted,
                       unit: 'km',
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _BigStatCard(
                       label: 'TOTAL TIME',
                       value: vm.run.durationFormatted,
                       unit: '',
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _BigStatCard(
                       label: 'AVG PACE',
                       value: vm.run.paceFormatted ?? '--',
@@ -78,7 +78,7 @@ class _RunSummaryView extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -90,7 +90,7 @@ class _RunSummaryView extends StatelessWidget {
                         unit: 'kcal',
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _MiniStatCard(
                         label: 'ELEVATION',
@@ -102,7 +102,7 @@ class _RunSummaryView extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _ActionButtons(vm: vm),
@@ -123,7 +123,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Row(
         children: [
           InkWell(
@@ -133,16 +133,23 @@ class _TopBar extends StatelessWidget {
               padding: EdgeInsets.all(6),
               child: Icon(
                 Icons.arrow_back_ios_new_rounded,
-                size: 20,
+                size: 18,
                 color: AppColors.onSurface,
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Text('Run Summary', style: AppTextStyles.titleLarge),
+          Text(
+            'Run Summary',
+            style: AppTextStyles.brandTitle.copyWith(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.onSurface,
+            ),
+          ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.share_outlined, color: AppColors.primary),
+            icon: const Icon(Icons.share_outlined, color: AppColors.primary, size: 20),
             onPressed: () {
               HapticFeedback.lightImpact();
               final summaryText =
@@ -169,14 +176,14 @@ class _MapRecapCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       child: SizedBox(
-        height: 180,
+        height: 160,
         width: double.infinity,
         child: RoutePreview(
           points: points.cast(),
           background: const Color(0xFFE8F3EC),
-          strokeWidth: 5,
+          strokeWidth: 4,
         ),
       ),
     );
@@ -194,14 +201,22 @@ class _RecapHeader extends StatelessWidget {
       children: [
         Text(
           vm.isReadOnly ? 'RUN DETAILS' : 'SESSION COMPLETE',
-          style: AppTextStyles.chipLabel,
+          style: AppTextStyles.chipLabel.copyWith(fontSize: 10, letterSpacing: 1.2),
         ),
-        const SizedBox(height: 6),
-        Text(vm.runName, style: AppTextStyles.headlineMedium.copyWith(fontSize: 22)),
         const SizedBox(height: 4),
         Text(
+          vm.runName,
+          style: AppTextStyles.headlineMedium.copyWith(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.onSurface,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
           DateFormat('EEE, MMM d • h:mm a').format(vm.run.startTime),
-          style: AppTextStyles.bodyMedium,
+          style: AppTextStyles.bodyMedium.copyWith(fontSize: 13),
         ),
       ],
     );
@@ -223,27 +238,35 @@ class _BigStatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTextStyles.chipLabel),
-          const SizedBox(height: 6),
+          Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
+          const SizedBox(height: 4),
           RichText(
             text: TextSpan(
               text: value,
               style: AppTextStyles.displaySmall.copyWith(
-                fontSize: 32,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
                 color: AppColors.primary,
+                letterSpacing: -0.5,
               ),
               children: [
                 if (unit.isNotEmpty)
-                  TextSpan(text: ' $unit', style: AppTextStyles.titleSmall),
+                  TextSpan(
+                    text: ' $unit',
+                    style: AppTextStyles.titleSmall.copyWith(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -267,26 +290,33 @@ class _MiniStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTextStyles.chipLabel),
-          const SizedBox(height: 6),
+          Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
+          const SizedBox(height: 4),
           RichText(
             text: TextSpan(
               text: value,
               style: AppTextStyles.headlineSmall.copyWith(
-                fontSize: 22,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
                 color: AppColors.primary,
               ),
               children: [
-                TextSpan(text: ' $unit', style: AppTextStyles.titleSmall),
+                TextSpan(
+                  text: ' $unit',
+                  style: AppTextStyles.titleSmall.copyWith(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           ),
@@ -312,7 +342,7 @@ class _ActionButtons extends StatelessWidget {
               Navigator.of(context).maybePop(false);
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _SecondaryActionButton(
             label: vm.isDeleting ? 'Deleting...' : 'Delete Run',
             onTap: vm.isDeleting ? null : () => _confirmDelete(context),
@@ -331,7 +361,7 @@ class _ActionButtons extends StatelessWidget {
                   vm.saveRun(context);
                 },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _SecondaryActionButton(
           label: 'Delete Run',
           onTap: vm.isSaving ? null : () => _confirmDiscard(context, vm),
@@ -409,12 +439,19 @@ class _PrimaryActionButton extends StatelessWidget {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: Text(label, style: AppTextStyles.labelLarge),
+        child: Text(
+          label,
+          style: AppTextStyles.labelLarge.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
+          ),
+        ),
       ),
     );
   }
@@ -434,13 +471,19 @@ class _SecondaryActionButton extends StatelessWidget {
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.onSurface,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           side: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.45)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: Text(label, style: AppTextStyles.labelLarge),
+        child: Text(
+          label,
+          style: AppTextStyles.labelLarge.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }

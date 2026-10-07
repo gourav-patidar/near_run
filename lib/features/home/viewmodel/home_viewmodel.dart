@@ -59,6 +59,7 @@ class HomeViewModel extends ChangeNotifier {
   HomeViewModel() {
     _load();
     _db.addListener(_load);
+    _prefs.addListener(notifyListeners);
   }
 
   Future<void> _load() async {
@@ -103,6 +104,7 @@ class HomeViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _db.removeListener(_load);
+    _prefs.removeListener(notifyListeners);
     super.dispose();
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
 import 'package:near_run/core/widgets/app_top_bar.dart';
@@ -27,7 +28,7 @@ class _ProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const AppTopBar(),
+      appBar: const AppTopBar(title: 'Profile'),
       body: SafeArea(
         top: false,
         child: Consumer<ProfileViewModel>(
@@ -43,10 +44,12 @@ class _ProfileView extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
                 children: [
-                  _AvatarSection(vm: vm),
-                  const SizedBox(height: 24),
+                  _ProfileHeaderCard(vm: vm),
+                  const SizedBox(height: 12),
+                  _StreakCard(streakDays: vm.streakDays),
+                  const SizedBox(height: 16),
                   _StatsAndChartCard(vm: vm),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   _BadgesSection(vm: vm),
                   const SizedBox(height: 16),
                   _BottomCardsRow(vm: vm),
@@ -60,70 +63,212 @@ class _ProfileView extends StatelessWidget {
   }
 }
 
-// ─── Avatar Section ───────────────────────────────────────────────────────────
+// ─── Profile Header Card (Small Height, Editable Name) ─────────────────────────
 
-class _AvatarSection extends StatelessWidget {
+class _ProfileHeaderCard extends StatelessWidget {
   final ProfileViewModel vm;
-  const _AvatarSection({required this.vm});
+  const _ProfileHeaderCard({required this.vm});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 90,
-              height: 90,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(
-                  colors: [
-                    Color(0xFF48E5D0),
-                    Color(0xFF40C4FF),
-                    Color(0xFFCE93D8),
-                    Color(0xFFFF8A65),
-                    Color(0xFF48E5D0),
-                  ],
-                ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Gradient Border Avatar
+          Container(
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(2),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  Color(0xFF48E5D0),
+                  Color(0xFF40C4FF),
+                  Color(0xFFCE93D8),
+                  Color(0xFFFF8A65),
+                  Color(0xFF48E5D0),
+                ],
               ),
             ),
-            Container(
-              width: 84,
-              height: 84,
+            child: Container(
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: Color(0xFF1A2A3A),
               ),
               child: const Icon(
                 Icons.person_rounded,
-                size: 48,
+                size: 26,
                 color: Color(0xFF90CAF9),
               ),
             ),
+          ),
+          const SizedBox(width: 14),
+
+          // Name + Subtitle + Edit Icon
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () => _editName(context, vm),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          vm.name,
+                          style: AppTextStyles.headlineMedium.copyWith(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: AppColors.onSurface,
+                            letterSpacing: -0.4,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.edit_rounded,
+                        size: 15,
+                        color: AppColors.primary.withValues(alpha: 0.8),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  vm.subtitle,
+                  style: AppTextStyles.labelSmall.copyWith(
+                    fontSize: 10,
+                    letterSpacing: 0.8,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editName(BuildContext context, ProfileViewModel vm) {
+    final controller = TextEditingController(text: vm.name);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Edit Name'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            hintText: 'Enter your name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              await vm.updateName(controller.text);
+              if (context.mounted) Navigator.of(context).pop();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Streak Card ──────────────────────────────────────────────────────────────
+
+class _StreakCard extends StatelessWidget {
+  final int streakDays;
+  const _StreakCard({required this.streakDays});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFF6F00).withValues(alpha: 0.12),
+            const Color(0xFFFF8F00).withValues(alpha: 0.05),
           ],
         ),
-        const SizedBox(height: 12),
-        Text(
-          vm.name,
-          style: AppTextStyles.headlineMedium.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 22,
-            color: AppColors.onSurface,
-            letterSpacing: -0.5,
-          ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFF6F00).withValues(alpha: 0.25),
+          width: 1,
         ),
-        const SizedBox(height: 2),
-        Text(
-          vm.subtitle,
-          style: AppTextStyles.labelSmall.copyWith(
-            fontSize: 10,
-            letterSpacing: 1,
-            color: AppColors.onSurfaceVariant,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6F00).withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Color(0xFFE65100),
+              size: 22,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'CURRENT STREAK',
+                style: AppTextStyles.chipLabel.copyWith(
+                  color: const Color(0xFFE65100),
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                streakDays > 0 ? '$streakDays Day Streak 🔥' : '0 Days — Run today to start!',
+                style: AppTextStyles.headlineSmall.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -137,15 +282,15 @@ class _StatsAndChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: AppColors.cardShadow,
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -170,7 +315,7 @@ class _StatsAndChartCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -182,7 +327,7 @@ class _StatsAndChartCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(99),
@@ -194,7 +339,7 @@ class _StatsAndChartCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _WeeklyBarChart(bars: vm.weeklyBars),
         ],
       ),
@@ -223,17 +368,17 @@ class _StatLabel extends StatelessWidget {
             Text(
               value,
               style: AppTextStyles.displaySmall.copyWith(
-                fontSize: 36,
-                fontWeight: FontWeight.w900,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
                 color: AppColors.onSurface,
-                letterSpacing: -1.5,
+                letterSpacing: -0.5,
               ),
             ),
             const SizedBox(width: 4),
             Text(
               unit,
               style: AppTextStyles.titleMedium.copyWith(
-                fontSize: 14,
+                fontSize: 13,
                 color: AppColors.primary,
                 fontStyle: FontStyle.italic,
                 fontWeight: FontWeight.w700,
@@ -255,7 +400,7 @@ class _WeeklyBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 120,
+      height: 110,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -280,14 +425,14 @@ class _Bar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const maxHeight = 85.0;
+    const maxHeight = 75.0;
     final height = math.max(maxHeight * bar.intensity, 8.0);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Container(
-          width: 26,
+          width: 24,
           height: height,
           decoration: BoxDecoration(
             color: bar.intensity < 0.2
@@ -298,7 +443,7 @@ class _Bar extends StatelessWidget {
                 ? [
                     BoxShadow(
                       color: barColor.withValues(alpha: 0.4),
-                      blurRadius: 10,
+                      blurRadius: 8,
                       offset: const Offset(0, 3),
                     )
                   ]
@@ -339,29 +484,13 @@ class _BadgesSection extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            if (vm.streakDays > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  '${vm.streakDays} DAY STREAK',
-                  style: AppTextStyles.labelMedium.copyWith(
-                    fontSize: 10,
-                    color: AppColors.primary,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         if (vm.badges.isEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
             decoration: BoxDecoration(
               color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
@@ -369,11 +498,11 @@ class _BadgesSection extends StatelessWidget {
             child: Column(
               children: [
                 Icon(Icons.emoji_events_outlined,
-                    size: 28, color: AppColors.onSurfaceVariant),
+                    size: 26, color: AppColors.onSurfaceVariant),
                 const SizedBox(height: 6),
                 Text(
                   'Record your first run to unlock badges.',
-                  style: AppTextStyles.bodySmall,
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -384,7 +513,7 @@ class _BadgesSection extends StatelessWidget {
             children: vm.badges
                 .map((b) => Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 10),
+                        padding: const EdgeInsets.only(right: 8),
                         child: _BadgeChip(badge: b),
                       ),
                     ))
@@ -439,15 +568,15 @@ class _BadgeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          Icon(icon, color: iconColor, size: 24),
-          const SizedBox(height: 6),
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(height: 4),
           Text(
             badge.title,
             textAlign: TextAlign.center,
@@ -476,17 +605,17 @@ class _BottomCardsRow extends StatelessWidget {
       children: [
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.local_fire_department_rounded,
-                    color: Colors.white70, size: 24),
-                const SizedBox(height: 8),
+                    color: Colors.white70, size: 22),
+                const SizedBox(height: 6),
                 Text(
                   'DAILY GOAL',
                   style: AppTextStyles.chipLabel.copyWith(
@@ -495,22 +624,22 @@ class _BottomCardsRow extends StatelessWidget {
                     letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   vm.dailyGoalLabel,
                   style: AppTextStyles.displaySmall.copyWith(
-                    fontSize: 32,
+                    fontSize: 24,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -1,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: vm.dailyGoalPercent,
-                    minHeight: 6,
+                    minHeight: 5,
                     backgroundColor: Colors.white.withValues(alpha: 0.25),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
                   ),
@@ -519,21 +648,21 @@ class _BottomCardsRow extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
 
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFFFFF0EC),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.favorite_rounded,
-                    color: Color(0xFFE53935), size: 24),
-                const SizedBox(height: 8),
+                    color: Color(0xFFE53935), size: 22),
+                const SizedBox(height: 6),
                 Text(
                   'AVG BPM',
                   style: AppTextStyles.chipLabel.copyWith(
@@ -542,14 +671,14 @@ class _BottomCardsRow extends StatelessWidget {
                     letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   '${vm.avgBpm}',
                   style: AppTextStyles.displaySmall.copyWith(
-                    fontSize: 32,
+                    fontSize: 24,
                     fontWeight: FontWeight.w900,
                     color: const Color(0xFFE53935),
-                    letterSpacing: -1,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 6),

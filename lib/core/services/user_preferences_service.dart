@@ -60,7 +60,14 @@ class UserPreferencesService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// For a "reset" action in settings (not yet wired but kept for safety).
+  Future<void> updateName(String newName) async {
+    final cleanName = newName.trim().isEmpty ? 'Runner' : newName.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kName, cleanName);
+    _name = cleanName;
+    notifyListeners();
+  }
+
   Future<void> reset() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kOnboardingComplete);

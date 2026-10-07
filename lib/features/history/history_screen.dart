@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/run_model.dart';
@@ -28,7 +29,7 @@ class _HistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const AppTopBar(),
+      appBar: const AppTopBar(title: 'History'),
       body: SafeArea(
         top: false,
         child: Consumer<HistoryViewModel>(
@@ -42,69 +43,95 @@ class _HistoryView extends StatelessWidget {
             return RefreshIndicator(
               color: AppColors.primary,
               onRefresh: vm.refresh,
-              child: CustomScrollView(
-                slivers: [
-                  const SliverToBoxAdapter(child: _HistoryHeading()),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                    sliver: SliverList.separated(
-                      itemCount: vm.runs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
-                      itemBuilder: (ctx, i) => _RunCard(
-                        run: vm.runs[i],
-                        onTap: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => RunSummaryScreen(
-                                run: vm.runs[i],
-                                isReadOnly: true,
-                              ),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                itemCount: vm.runs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 18),
+                itemBuilder: (ctx, i) {
+                  final run = vm.runs[i];
+                  return Dismissible(
+                    key: Key('run_${run.id}'),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (_) async {
+                      HapticFeedback.mediumImpact();
+                      return await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text('Delete Run?'),
+                          content: const Text(
+                            'Are you sure you want to delete this run permanently?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(context).pop(false),
+                              child: const Text('Cancel'),
                             ),
-                          );
-                          vm.refresh();
-                        },
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(context).pop(true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    onDismissed: (_) async {
+                      HapticFeedback.heavyImpact();
+                      if (run.id != null) {
+                        await vm.deleteRun(run.id!);
+                      }
+                    },
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.shade200,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    child: _RunCard(
+                      run: run,
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => RunSummaryScreen(
+                              run: run,
+                              isReadOnly: true,
+                            ),
+                          ),
+                        );
+                        vm.refresh();
+                      },
+                    ),
+                  );
+                },
               ),
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-class _HistoryHeading extends StatelessWidget {
-  const _HistoryHeading();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'History',
-            style: AppTextStyles.headlineMedium.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
-              color: AppColors.onSurface,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'YOUR KINETIC JOURNEY',
-            style: AppTextStyles.chipLabel.copyWith(
-              fontSize: 11,
-              letterSpacing: 1.5,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -141,12 +168,12 @@ class _RunCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: AppColors.cardShadow,
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -154,28 +181,32 @@ class _RunCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _dateLabel,
-                    style: AppTextStyles.labelSmall.copyWith(
-                      color: AppColors.primary,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _title,
+                        style: AppTextStyles.headlineSmall.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      Text(
+                        _dateLabel,
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 10,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _title,
-                    style: AppTextStyles.headlineSmall.copyWith(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 20,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       _StatItem(
@@ -184,14 +215,14 @@ class _RunCard extends StatelessWidget {
                         unit: 'km',
                         valueColor: AppColors.primary,
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 20),
                       _StatItem(
                         label: 'TIME',
                         value: run.durationFormatted,
                         unit: '',
                         valueColor: AppColors.onSurface,
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 20),
                       _StatItem(
                         label: 'PACE',
                         value: run.paceFormatted ?? '--',
@@ -205,9 +236,9 @@ class _RunCard extends StatelessWidget {
             ),
             ClipRRect(
               borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(20)),
+                  const BorderRadius.vertical(bottom: Radius.circular(16)),
               child: SizedBox(
-                height: 140,
+                height: 90,
                 width: double.infinity,
                 child: RoutePreview(points: run.routePoints),
               ),
@@ -237,8 +268,8 @@ class _StatItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 10)),
-        const SizedBox(height: 2),
+        Text(label, style: AppTextStyles.chipLabel.copyWith(fontSize: 9)),
+        const SizedBox(height: 1),
         Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
@@ -246,15 +277,15 @@ class _StatItem extends StatelessWidget {
             Text(
               value,
               style: AppTextStyles.headlineSmall.copyWith(
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: valueColor,
-                letterSpacing: -0.5,
+                letterSpacing: -0.3,
               ),
             ),
             if (unit.isNotEmpty) ...[
               const SizedBox(width: 2),
-              Text(unit, style: AppTextStyles.bodySmall.copyWith(fontSize: 11)),
+              Text(unit, style: AppTextStyles.bodySmall.copyWith(fontSize: 10)),
             ],
           ],
         ),
@@ -274,7 +305,7 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(
             Icons.directions_run_rounded,
-            size: 48,
+            size: 44,
             color: AppColors.primary.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 12),
@@ -282,6 +313,7 @@ class _EmptyState extends StatelessWidget {
             'No runs yet',
             style: AppTextStyles.titleMedium.copyWith(
               color: AppColors.onSurfaceVariant,
+              fontSize: 15,
             ),
           ),
           const SizedBox(height: 4),

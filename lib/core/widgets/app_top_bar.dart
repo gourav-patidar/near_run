@@ -3,7 +3,12 @@ import 'package:near_run/core/theme/app_colors.dart';
 import 'package:near_run/core/theme/app_text_styles.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
-  const AppTopBar({super.key});
+  final String title;
+
+  const AppTopBar({
+    super.key,
+    this.title = 'NearRun',
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(56);
@@ -27,7 +32,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         child: Row(
           children: [
             Text(
-              'NearRun',
+              title,
               style: AppTextStyles.brandTitle.copyWith(
                 fontWeight: FontWeight.w900,
                 fontSize: 20,
